@@ -17,20 +17,24 @@ def main():
 	print "\tFiles: %s" % FileTypes
 
 	BaseQuery = str(" ".join(str(x) for x in Primary_words))
-	if use_blacklist:
-		Queries = filterQueries(getQueries(BaseQuery, Secondary_words, Secondary_words_count), readFile(Blacklist_file))
-	else:
-		Queries = getQueries(BaseQuery, Secondary_words, Secondary_words_count)
-	
-	print "\n==========Beginning Searches==========\n"
-	Websites = set(getWebsites(Queries, FileTypes))
-	Screens, Downloads = sortWebsites(Websites, FileTypes)
-	print "\n==========Beginning Downloads=========\n"
-	print "\t Attempting to Download From %s URLs" % len(Downloads)
-	Errors = getDownloads(Downloads)
-	if use_screens:
-		print "\t Attempting to take %s Screenshots" % (len(Screens) + (len(Errors)))
-		getScreens(Screens, Errors)
+	if not no_search:
+		if use_blacklist:
+			Queries = filterQueries(getQueries(BaseQuery, Secondary_words, Secondary_words_count), readFile(Blacklist_file))
+		else:
+			Queries = getQueries(BaseQuery, Secondary_words, Secondary_words_count)
+	if not no_download:
+		if no_search:
+			Websites = set(readFile(URL_file))
+		else:
+			print "\n==========Beginning Searches==========\n"
+			Websites = set(getWebsites(Queries, FileTypes))
+		Screens, Downloads = sortWebsites(Websites, FileTypes)
+		print "\n==========Beginning Downloads=========\n"
+		print "\t Attempting to Download From %s URLs" % len(Downloads)
+		Errors = getDownloads(Downloads)
+		if use_screens:
+			print "\t Attempting to take %s Screenshots" % (len(Screens) + (len(Errors)))
+			getScreens(Screens, Errors)
 	print '\n Finished..'
 
 def getWords(): 
@@ -55,6 +59,16 @@ def readFile(file_path):
 		file = [x.strip() for x in file]
 	return file
 
+def appendFile(data, file_path):
+	if not os.path.exists(file_path):
+		open(file_path, 'w')
+	with open(file_path, 'a') as f:
+		[f.write(line + '\n') for line in data]
+
+def appendBlacklist(line):
+	with open(Blacklist_file, 'a') as f:
+		[f.write(line + "\n")]
+
 def getQueries(base_query, secondary_words, secondary_words_count): 
 	queries = []
 	for x in range(1, secondary_words_count + 1):
@@ -66,7 +80,6 @@ def filterQueries(queries, blacklist):
 
 def getWebsites(queries, filetypes):
 	websites = []
-	file = "log.txt"
 	for query in queries:
 		print "Searching google with query: %s" % query 
 		print "\t No file filter"
@@ -75,7 +88,7 @@ def getWebsites(queries, filetypes):
 			for file in filetypes:
 				print "\t Filtering for .%s" % file
 				websites.extend(googleSearch(file + " " +  query))
-		appendFile(websites, file)
+		appendFile(websites, URL_file)
 		if use_blacklist:
 			print "\t Appending Query to Blacklist"
 			appendBlacklist(query)
@@ -86,12 +99,6 @@ def googleSearch(query):
 	for j in search(query, tld="co.in", num=Number_of_results, stop=1, pause=2):
 		top_results.append(j)
 	return top_results
-
-def appendFile(data, file_path):
-	if not os.path.exists(file_path):
-		open(file_path, 'w')
-	with open(file_path, 'a') as f:
-		[f.write(line+ '\n') for line in data]
 
 def sortWebsites(urls, filetypes):
 	downloads = []
@@ -146,10 +153,6 @@ def makeScreenlist(screens, errors, folder, file):
 		[f.write(url + '\n') for url in screens]
 		[f.write(url + '\n') for url in errors]
 
-def appendBlacklist(line):
-	with open(Blacklist_file, 'a') as f:
-		[f.write(line+ "\n")]
-
 if __name__ == '__main__':
 	import sys
 	import os
@@ -179,23 +182,29 @@ if __name__ == '__main__':
 	except ImportError:
 		print "\n Error importing argparse"
 
-	parser = argparse.ArgumentParser(description='google-term-scraper')
+	parser = argparse.ArgumentParser(description='google-term-scraper', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+	parser.add_argument('-S', '--search_only', default=False, dest='no_download', action='store_true', help='only search and collect urls, no downloads or screens')
+	parser.add_argument('-D', '--download_only', default=False, dest='no_search', action='store_true', help='only download from saved url list, no searching')
 	parser.add_argument('-nB', '--no_blacklist', default=False, dest='no_blacklist', action='store_true', help='will not use a blacklist to filter already used searches')
 	parser.add_argument('-nF', '--no_filter_files', default=False, dest='no_filter_files', action='store_true', help='will not use filefilter: search engine option')
-	parser.add_argument('-nS', '--no_screenshots', default=False, dest='no_screenshots', action='store_true')
-	parser.add_argument('-wF', '--words_file', default='words.txt', help='specify the file location of word list' )
-	parser.add_argument('-fF', '--filetype_file', default='filetypes.txt', help='specify the file location of filetype list')
-	parser.add_argument('-bF', '--blacklist_file', default='blacklist.txt', help='specify the file location of black list')   
+	parser.add_argument('-nS', '--no_screenshots', default=False, dest='no_screenshots', action='store_true', help='will not attemp to take screen shots')
+	parser.add_argument('-wF', '--words_file', default='./config/words.txt', help='specify the file location of word list' )
+	parser.add_argument('-fF', '--filetype_file', default='./config/filetypes.txt', help='specify the file location of filetypes list')
+	parser.add_argument('-bF', '--blacklist_file', default='./config/blacklist.txt', help='specify the file location of black list')   
+	parser.add_argument('-uF', '--url_file', default='./config/url.txt', help='specify the file location of the results of url search')
 	parser.add_argument('-R', '--results', default=10, help='number of top results collected in google search')
 	args = parser.parse_args()
 
 	Word_file = args.words_file
 	Filetypes_file = args.filetype_file
 	Blacklist_file = args.blacklist_file
+	URL_file = args.url_file
 	Number_of_results = args.results
 	use_blacklist = not args.no_blacklist
 	use_filter = not args.no_filter_files
 	use_screens = not args.no_screenshots
+	no_download = args.no_download
+	no_search = args.no_search
 
 	args = parser.parse_args()
 	main()

@@ -1,5 +1,0 @@
-pdf
-docx
-doc
-pptx
-ppt
