@@ -1,0 +1,20 @@
+bft*
+Inmarsat-3
+Inmarsat-4
+Artemis
+Thuraya
+SNCC
+SGS
+VSAT
+gps
+satcomm
+fbcb2
+elprs
+jbc-p
+nett warrior
+rto
+bft2
+hardware
+satellites
+army
+marines
