@@ -21,13 +21,14 @@ def main():
 			Queries = filterQueries(getQueries(BaseQuery, Secondary_words), readFile(Blacklist_file))
 		else:
 			Queries = getQueries(BaseQuery, Secondary_words) 
+		Websites = set(getWebsites(Queries, FileTypes))
+
+	else:
+		Websites = set(readFile(URL_file))
 
 	if download:
 		print "\n==========Beginning Searches==========\n"
-		if search:
-			Websites = set(getWebsites(Queries, FileTypes))
-		else:
-			Websites = set(readFile(URL_file))
+
 		Screens, Downloads = sortWebsites(Websites, FileTypes)
 		print "\n==========Beginning Downloads=========\n"
 		print "\t Attempting to Download From %s URLs" % len(Downloads)
@@ -69,10 +70,18 @@ def appendBlacklist(line):
 	with open(Blacklist_file, 'a') as f:
 		[f.write(line + "\n")]
 
+def writeFile(data, file_path):
+	with open(file_path, 'w') as f:
+		[f.write(line + '\n') for line in data]
+
 def getQueries(base_query, secondary_words): 
 	print "Generating Queries."
 	queries = []
-	for x in range(1, Number_of_terms + 1):
+	if len(secondary_words) < Number_of_terms:
+		count = len(secondary_words)
+	else: 
+		count = Number_of_terms
+	for x in range(1, count + 1):
 		queries.extend([base_query + " " + s for s in[" ".join(term) for term in combinations(secondary_words, x)]])
 		print "\t."
 	return queries
@@ -94,6 +103,7 @@ def getWebsites(queries, filetypes):
 		if use_blacklist:
 			print "\t Appending Query to Blacklist"
 			appendBlacklist(query)
+		cleanURL_file()
 	return websites
 
 def googleSearch(query):
@@ -102,6 +112,9 @@ def googleSearch(query):
 	for url in search("test", tld="co.in", num=Number_of_results, stop=1, pause=2):
 		top_results.append(url)
 	return top_results
+
+def cleanURL_file():
+	writeFile(set(readFile(URL_file)), URL_file)
 
 def sortWebsites(urls, filetypes):
 	downloads = []
@@ -112,7 +125,6 @@ def sortWebsites(urls, filetypes):
 		else:
 			screens.append(url)
 	return screens, downloads
-
 
 def getDownloads(downloads):
 	errors = []
@@ -196,6 +208,7 @@ if __name__ == '__main__':
 	parser.add_argument('-uF', '--url_file', default='./config/url.txt', help='specify the file location of the results of url search')
 	parser.add_argument('-R', '--results', default=10, help='number of top results collected in google search')
 	parser.add_argument('-T', '--terms', default=10, help='max number of secondary search terms per google search')
+
 	args = parser.parse_args()
 	Word_file = args.words_file
 	Filetypes_file = args.filetype_file
