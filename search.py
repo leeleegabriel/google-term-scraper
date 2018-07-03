@@ -6,11 +6,10 @@ def main():
 	print "Loading Words from %s" % Word_file
 
 	Primary_words, Secondary_words = getWords()
-	Secondary_words_count = len(Secondary_words)
 
 	print "\tPrimary: %s" % Primary_words
 	print "\tSecondary: %s" % Secondary_words
-	print "\tLoading Filetypes from %s" % Filetypes_file
+	print "Loading Filetypes from %s" % Filetypes_file
 
 	FileTypes = readFile(Filetypes_file)
 
@@ -19,9 +18,9 @@ def main():
 	BaseQuery = str(" ".join(str(x) for x in Primary_words))
 	if search:
 		if use_blacklist:
-			Queries = filterQueries(getQueries(BaseQuery, Secondary_words, Secondary_words_count), readFile(Blacklist_file))
+			Queries = filterQueries(getQueries(BaseQuery, Secondary_words), readFile(Blacklist_file))
 		else:
-			Queries = getQueries(BaseQuery, Secondary_words, Secondary_words_count) 
+			Queries = getQueries(BaseQuery, Secondary_words) 
 
 	if download:
 		print "\n==========Beginning Searches==========\n"
@@ -70,10 +69,10 @@ def appendBlacklist(line):
 	with open(Blacklist_file, 'a') as f:
 		[f.write(line + "\n")]
 
-def getQueries(base_query, secondary_words, secondary_words_count): 
-	print "\tGenerating Queries."
+def getQueries(base_query, secondary_words): 
+	print "Generating Queries."
 	queries = []
-	for x in range(1, secondary_words_count + 1):
+	for x in range(1, terms + 1):
 		queries.extend([base_query + " " + s for s in[" ".join(term) for term in combinations(secondary_words, x)]])
 		print "\t."
 	return queries
@@ -196,6 +195,7 @@ if __name__ == '__main__':
 	parser.add_argument('-bF', '--blacklist_file', default='./config/blacklist.txt', help='specify the file location of black list')   
 	parser.add_argument('-uF', '--url_file', default='./config/url.txt', help='specify the file location of the results of url search')
 	parser.add_argument('-R', '--results', default=10, help='number of top results collected in google search')
+	parser.add_argument('-T', '--terms', default=10, help='max number of secondary search terms per google search')
 	args = parser.parse_args()
 
 	Word_file = args.words_file
@@ -208,6 +208,7 @@ if __name__ == '__main__':
 	use_screens = not args.no_screenshots
 	download = not args.no_download
 	search = not args.no_search
+	terms = args.terms
 
 	args = parser.parse_args()
 	main()
