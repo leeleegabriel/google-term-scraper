@@ -17,13 +17,12 @@ def main():
 	print "\tFiles: %s" % FileTypes
 
 	BaseQuery = str(" ".join(str(x) for x in Primary_words))
-	if not no_search:
-		if use_blacklist:
-			Queries = filterQueries(getQueries(BaseQuery, Secondary_words, Secondary_words_count), readFile(Blacklist_file))
-		else:
-			Queries = getQueries(BaseQuery, Secondary_words, Secondary_words_count)
 	if not no_download:
 		if no_search:
+			if use_blacklist:
+				Queries = filterQueries(getQueries(BaseQuery, Secondary_words, Secondary_words_count), readFile(Blacklist_file))
+			else:
+				Queries = getQueries(BaseQuery, Secondary_words, Secondary_words_count)
 			Websites = set(readFile(URL_file))
 		else:
 			print "\n==========Beginning Searches==========\n"
