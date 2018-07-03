@@ -72,7 +72,7 @@ def appendBlacklist(line):
 def getQueries(base_query, secondary_words): 
 	print "Generating Queries."
 	queries = []
-	for x in range(1, terms + 1):
+	for x in range(1, Number_of_terms + 1):
 		queries.extend([base_query + " " + s for s in[" ".join(term) for term in combinations(secondary_words, x)]])
 		print "\t."
 	return queries
@@ -98,8 +98,8 @@ def getWebsites(queries, filetypes):
 
 def googleSearch(query):
 	top_results = []
-	for j in search(query, tld="co.in", num=Number_of_results, stop=1, pause=2):
-		top_results.append(j)
+	for url in search(query, stop=Number_of_results):
+		top_results.append()
 	return top_results
 
 def sortWebsites(urls, filetypes):
@@ -178,7 +178,6 @@ if __name__ == '__main__':
 	except ImportError:
 		print "\nError importing urrlib2\n"
 		sys.exit(1)
-
 	try:
 		import argparse
 	except ImportError:
@@ -197,18 +196,18 @@ if __name__ == '__main__':
 	parser.add_argument('-R', '--results', default=10, help='number of top results collected in google search')
 	parser.add_argument('-T', '--terms', default=10, help='max number of secondary search terms per google search')
 	args = parser.parse_args()
-
 	Word_file = args.words_file
 	Filetypes_file = args.filetype_file
 	Blacklist_file = args.blacklist_file
 	URL_file = args.url_file
-	Number_of_results = args.results
+	Number_of_results = int(args.results)
+	Number_of_terms = int(args.terms)
 	use_blacklist = not args.no_blacklist
 	use_filter = not args.no_filter_files
 	use_screens = not args.no_screenshots
 	download = not args.no_download
 	search = not args.no_search
-	terms = args.terms
+	
 
 	args = parser.parse_args()
 	main()
