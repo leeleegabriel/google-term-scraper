@@ -27,7 +27,7 @@ def main():
 		if search:
 			Websites = set(getWebsites(Queries, FileTypes))
 		else:
-			Websites = readFile(URL_file)
+			Websites = set(readFile(URL_file))
 		Screens, Downloads = sortWebsites(Websites, FileTypes)
 		print "\n==========Beginning Downloads=========\n"
 		print "\t Attempting to Download From %s URLs" % len(Downloads)
@@ -98,8 +98,9 @@ def getWebsites(queries, filetypes):
 
 def googleSearch(query):
 	top_results = []
-	for url in search(query, stop=Number_of_results):
-		top_results.append()
+	from googlesearch import search # why this fixed an error idk but idgaf
+	for url in search("test", tld="co.in", num=Number_of_results, stop=1, pause=2):
+		top_results.append(url)
 	return top_results
 
 def sortWebsites(urls, filetypes):
