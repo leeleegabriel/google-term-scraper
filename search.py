@@ -10,23 +10,25 @@ def main():
 
 	print "\tPrimary: %s" % Primary_words
 	print "\tSecondary: %s" % Secondary_words
-	print "Loading Filetypes from %s" % Filetypes_file
+	print "\tLoading Filetypes from %s" % Filetypes_file
 
 	FileTypes = readFile(Filetypes_file)
 
 	print "\tFiles: %s" % FileTypes
 
 	BaseQuery = str(" ".join(str(x) for x in Primary_words))
-	if not no_download:
-		if no_search:
-			if use_blacklist:
-				Queries = filterQueries(getQueries(BaseQuery, Secondary_words, Secondary_words_count), readFile(Blacklist_file))
-			else:
-				Queries = getQueries(BaseQuery, Secondary_words, Secondary_words_count)
-			Websites = set(readFile(URL_file))
+	if search:
+		if use_blacklist:
+			Queries = filterQueries(getQueries(BaseQuery, Secondary_words, Secondary_words_count), readFile(Blacklist_file))
 		else:
-			print "\n==========Beginning Searches==========\n"
+			Queries = getQueries(BaseQuery, Secondary_words, Secondary_words_count) 
+
+	if download:
+		print "\n==========Beginning Searches==========\n"
+		if search:
 			Websites = set(getWebsites(Queries, FileTypes))
+		else:
+			Websites = readFile(URL_file)
 		Screens, Downloads = sortWebsites(Websites, FileTypes)
 		print "\n==========Beginning Downloads=========\n"
 		print "\t Attempting to Download From %s URLs" % len(Downloads)
@@ -69,9 +71,11 @@ def appendBlacklist(line):
 		[f.write(line + "\n")]
 
 def getQueries(base_query, secondary_words, secondary_words_count): 
+	print "\tGenerating Queries."
 	queries = []
 	for x in range(1, secondary_words_count + 1):
 		queries.extend([base_query + " " + s for s in[" ".join(term) for term in combinations(secondary_words, x)]])
+		print "\t."
 	return queries
 
 def filterQueries(queries, blacklist):
@@ -202,8 +206,8 @@ if __name__ == '__main__':
 	use_blacklist = not args.no_blacklist
 	use_filter = not args.no_filter_files
 	use_screens = not args.no_screenshots
-	no_download = args.no_download
-	no_search = args.no_search
+	download = not args.no_download
+	search = not args.no_search
 
 	args = parser.parse_args()
 	main()

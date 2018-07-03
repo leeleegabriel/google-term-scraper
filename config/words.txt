@@ -1,3 +1,32 @@
-primaryterm*
-secondary1
-secondary2
+bft*
+marines
+army
+MT-2011
+L-Band
+DAGR
+JV-5
+GPS
+BFT2
+Viasat
+FIPS 140-2
+M-DACT
+jbc-p
+ELPRS
+SINCGARS
+Nett warrior
+ATAK
+PLI
+RTO
+SATCOM
+FBCB2
+TOC kit
+FBCB2 6.5
+Inmarsat-3
+Inmarsat-4
+Artmis
+Thuraya
+SNCC
+SGS
+VSAT
+KGV-72
+PIED
