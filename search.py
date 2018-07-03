@@ -22,8 +22,7 @@ def main():
 		else:
 			Queries = getQueries(BaseQuery, Secondary_words) 
 		Websites = set(getWebsites(Queries, FileTypes))
-
-	else:
+	else download:
 		Websites = set(readFile(URL_file))
 
 	if download:
@@ -99,22 +98,19 @@ def getWebsites(queries, filetypes):
 			for file in filetypes:
 				print "\t Filtering for .%s" % file
 				websites.extend(googleSearch(file + " " +  query))
-		appendFile(websites, URL_file)
+		writeFile(websites, URL_file)
 		if use_blacklist:
 			print "\t Appending Query to Blacklist"
 			appendBlacklist(query)
-		cleanURL_file()
+		#cleanURL_file()
 	return websites
 
 def googleSearch(query):
 	top_results = []
 	from googlesearch import search # why this fixed an error idk but idgaf
-	for url in search("test", tld="co.in", num=Number_of_results, stop=1, pause=2):
+	for url in search(query, tld="co.in", num=Number_of_results, stop=1, pause=2):
 		top_results.append(url)
 	return top_results
-
-def cleanURL_file():
-	writeFile(set(readFile(URL_file)), URL_file)
 
 def sortWebsites(urls, filetypes):
 	downloads = []
@@ -128,8 +124,6 @@ def sortWebsites(urls, filetypes):
 
 def getDownloads(downloads):
 	errors = []
-	dl_count = 0 
-	err_count = 0
 	total_files = len(downloads)
 	for url in downloads:
 		file_name = url.split('/')[-1]
@@ -222,6 +216,9 @@ if __name__ == '__main__':
 	download = not args.no_download
 	search = not args.no_search
 	
-
 	args = parser.parse_args()
-	main()
+	if not download and not search:
+		print "k."
+		sys.exit(1)
+	else:
+		main()
