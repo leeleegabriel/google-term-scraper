@@ -22,7 +22,7 @@ def main():
 		else:
 			Queries = getQueries(BaseQuery, Secondary_words) 
 		Websites = set(getWebsites(Queries, FileTypes))
-	else download:
+	else:
 		Websites = set(readFile(URL_file))
 
 	if download:
@@ -108,7 +108,7 @@ def getWebsites(queries, filetypes):
 def googleSearch(query):
 	top_results = []
 	from googlesearch import search # why this fixed an error idk but idgaf
-	for url in search(query, tld="co.in", num=Number_of_results, stop=1, pause=2):
+	for url in googlesearch(query, tld="co.in", num=Number_of_results, stop=1, pause=2):
 		top_results.append(url)
 	return top_results
 
@@ -176,7 +176,7 @@ if __name__ == '__main__':
 		print "\nError importing intertools\n"
 		sys.exit(1)
 	try:
-		from googlesearch import search
+		from googlesearch import search as googlesearch
 	except ImportError:
 		print "\nError importing google\n"
 		sys.exit(1)
