@@ -10,7 +10,6 @@ URL_file = './config/URL.txt'
 Errors_file = './config/errors.txt'
 Downloads_folder = './downloads'
 
-
 def main():
 	if search:
 		tqdm.write('Loading Words from %s' % Word_file)
@@ -78,25 +77,29 @@ def getWebsites(queries, filetypes):
 	total_urls = len(queries) * ((len(filetypes) + 1) * Number_of_results)
 	for query in tqdm(queries):
 		search = []
-		search.extend(googleSearch(query))
+		search.extend(googleSearch(query, 0))
 		for file in filetypes:
-			search.extend(googleSearch(file + " " +  query))
+			search.extend(googleSearch(file + " " +  query, 0))
 		search = set(search)
 		filterWebsites(search, filetypes)
 		appendFile(search, URL_file) # this is weird, maybe just append with a array contained in loop
-		appendFile(query, Query_Blacklist_file)
+		appendLine(query, Query_Blacklist_file)
 		websites.extend(search)
 	websites = set(websites)
 	return websites
 
-def googleSearch(query):
+def googleSearch(query, count):
 	top_results = []
 	try:
 		for url in googlesearch(query, tld="co.in", num=Number_of_results, stop=1, pause=2):
 			top_results.append(url)
 	except Exception as e:
 		sleep(.5)
-		top_results = googlesearch(query)
+		if count < 10:
+			top_results = googlesearch(query, count + 1)
+		else:
+			tqdm.write('Error: %s' % e)
+			sys.exit(0)
 	return top_results
 
 def filterWebsites(urls, filetypes):
@@ -121,6 +124,7 @@ def getDownloads(downloads):
 					folder = Downloads_folder + '/misc/'
 				with open(folder + b64encode(url), 'wb') as f:
 					f.write(write)
+				appendLine(url, URL_blacklist_file)
 			except Exception as e:
 				appendLine(url, Errors_file)
 				e_count += 1
@@ -154,7 +158,7 @@ def writeFile(data, file_path):
 	with open(file_path, 'w') as f:
 		[f.write(line + '\n') for line in data]
 
-def mkFolder(folder_path):
+def makeFolder(folder_path):
 	if not os.path.exists(folder_path):	
 		os.makedirs(folder_path)
 
@@ -195,9 +199,9 @@ if __name__ == '__main__':
 	Min_Number_of_terms = int(args.min_terms)
 	Max_Number_of_terms = int(args.max_terms)
 
-	mkFolder(Downloads_folder)
-	mkFolder(Downloads_folder + '/app/')
-	mkFolder(Downloads_folder + '/misc/')
+	makeFolder(Downloads_folder)
+	makeFolder(Downloads_folder + '/app/')
+	makeFolder(Downloads_folder + '/misc/')
 	if not download and not search:
 		tqdm.write('k.')
 		sys.exit(1)
