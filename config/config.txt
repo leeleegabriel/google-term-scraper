@@ -1,0 +1,3 @@
+[Dirs]
+DBase_dir = './downloads'
+Config_dir = './config'

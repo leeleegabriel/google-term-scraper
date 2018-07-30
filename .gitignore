@@ -1,5 +1,4 @@
 downloads/*
-downloads/
 config/*
-config/
 **.txt
+!config/config.txt

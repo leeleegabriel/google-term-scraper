@@ -2,24 +2,6 @@
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
 
-
-DBase_dir = './downloads'
-Config_dir = './config'
-#Filtered_dir = DBase_dir + '/filtered/'
-#Unfiltered_dir = DBase_dir + '/unfiltered/pdf'
-#Dataset_dir = DBase_dir + '/dataset'
-App_dir = DBase_dir + '/app'
-Misc_dir = DBase_dir + '/mis'
-dirs = (DBase_dir, Filtered_dir Unfiltered_dir, Dataset_dir, App_dir, Misc_dir, Config_dir)
-
-Errors_file = Config_dir + '/errors.txt'
-URL_file = Config_dir + '/URL.txt'
-Terms_file = Config_dir + '/terms.txt'
-Word_file = Config_dir + '/words.txt'
-Filetypes_file = Config_dir + '/filetypes.txt'
-Query_Blacklist_file = Config_dir + '/Query_blacklist.txt'
-URL_blacklist_file = Config_dir + '/URL_blacklist.txt'
-
 Min_Occurences = 12
 dictionary, tf_idf, sims = '', '', ''
 
@@ -34,10 +16,11 @@ from subprocess import call
 from time import sleep
 from tqdm import tqdm
 from base64 import b64encode
+
+import lib.Filter as Filter
 from lib.timeout import timeout
-from lib.filter import filter
 
-
+Config_file = './config/config.txt'
 
 def main():
 	if Search:
@@ -68,8 +51,8 @@ def main():
 				run = False
 			else:
 				Websites = newWebsites
-	if Filter():
-		filter()
+	if Filter:
+		filter(Config_file)
 	tqdm.write('\n Finished..')
 
 def getWords(): 
@@ -204,16 +187,39 @@ if __name__ == '__main__':
 		tqdm.write('\nError importing google\n')
 		sys.exit(1)
 
+	import configparser
+	config = configparser.ConfigParser()
+	config.read(Config_file)
+	DBase_dir = config.get('Dirs', 'DBase_dir').replace('\'', '')
+	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
+	App_dir = DBase_dir + '/app'
+	Misc_dir = DBase_dir + '/mis'
+	CDownloads_dir = CBase_dir + '/download'
+	CSearch_dir = CBase_dir + '/search'
+	CBlacklists_dir = CBase_dir + '/blacklists'
+	dirs = [DBase_dir, CBase_dir, App_dir, Misc_dir, CDownloads_dir, CSearch_dir, CBlacklists_dir]
+
+	Errors_file = CDownloads_dir + '/errors.txt'
+	URL_file = CDownloads_dir+ '/URL.txt'
+	dWord_file = CSearch_dir + '/words.txt'
+	Filetypes_file = CSearch_dir + '/filetypes.txt'
+	Query_Blacklist_file = CBlacklists_dir + '/Query_blacklist.txt'
+	URL_blacklist_file = CBlacklists_dir + '/URL_blacklist.txt'
+
 	parser = argparse.ArgumentParser(description='google-term-scraper', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('-S', '--search_only', default=False, dest='search_only', action='store_true', help='only search and collect urls, no downloading of file')
 	parser.add_argument('-D', '--download_only', default=False, dest='download_only', action='store_true', help='only download from saved url list, no searching')
 	parser.add_argument('-F', '--filter_only', default=False, dest='filter_only', action='store_true', help='only download from saved url list, no searching')
-	
 	parser.add_argument('-R', '--results', default=10, help='number of top results collected in google search')
 	parser.add_argument('-Ma', '--max_terms', default=10, help='max number of secondary search terms per google search')
 	parser.add_argument('-Mi', '--min_terms', default=2, help='min number of secondary search terms per google search')
 	
 	args = parser.parse_args()
+
+	if((args.download_only and args.search_only and args.filter_only) or (args.download_only and args.search_only) or (args.download_only and args.filter_only) or (args.search_only and args.filter_only)):
+		tqdm.write('Invalid Flags')
+		sys.exit(1)
+
 	Download, Search, Filter = [True, True, True]
 	if(args.download_only):
 		Search, Filter = [False, False]
@@ -226,9 +232,4 @@ if __name__ == '__main__':
 	Max_Number_of_terms = int(args.max_terms)
 
 	[makeFolder(directory) for directory in dirs]
-
-	if not download and not search:
-		tqdm.write('k.')
-		sys.exit(1)
-	else:
-		main()
+	main()
