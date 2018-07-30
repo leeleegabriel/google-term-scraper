@@ -2,16 +2,45 @@
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
 
-Word_file = './config/words.txt'
-Filetypes_file = './config/filetypes.txt'
-Query_Blacklist_file = './config/Query_blacklist.txt'
-URL_blacklist_file = './config/URL_blacklist.txt'
-URL_file = './config/URL.txt'
-Errors_file = './config/errors.txt'
-Downloads_folder = './downloads'
+
+DBase_dir = './downloads'
+Config_dir = './config'
+#Filtered_dir = DBase_dir + '/filtered/'
+#Unfiltered_dir = DBase_dir + '/unfiltered/pdf'
+#Dataset_dir = DBase_dir + '/dataset'
+App_dir = DBase_dir + '/app'
+Misc_dir = DBase_dir + '/mis'
+dirs = (DBase_dir, Filtered_dir Unfiltered_dir, Dataset_dir, App_dir, Misc_dir, Config_dir)
+
+Errors_file = Config_dir + '/errors.txt'
+URL_file = Config_dir + '/URL.txt'
+Terms_file = Config_dir + '/terms.txt'
+Word_file = Config_dir + '/words.txt'
+Filetypes_file = Config_dir + '/filetypes.txt'
+Query_Blacklist_file = Config_dir + '/Query_blacklist.txt'
+URL_blacklist_file = Config_dir + '/URL_blacklist.txt'
+
+Min_Occurences = 12
+dictionary, tf_idf, sims = '', '', ''
+
+import sys
+import os
+import urllib2	
+import argparse
+import errno
+from itertools import combinations
+from itertools import imap
+from subprocess import call
+from time import sleep
+from tqdm import tqdm
+from base64 import b64encode
+from lib.timeout import timeout
+from lib.filter import filter
+
+
 
 def main():
-	if search:
+	if Search:
 		tqdm.write('Loading Words from %s' % Word_file)
 
 		Primary_words, Secondary_words = getWords()
@@ -26,20 +55,21 @@ def main():
 		BaseQuery = str(" ".join(str(x) for x in Primary_words))			
 		Queries = filterQueries(getQueries(BaseQuery, Secondary_words), readFile(Query_Blacklist_file))
 		Websites = getWebsites(Queries, FileTypes)
-	else:
+	elif(Download):
 		Websites = readFile(URL_file)
-
-	if download:
+	if Download:
 		run = True
 		while run:
 			Downloads = filterQueries(Websites, readFile(URL_blacklist_file))
-			tqdm.write('\t Attempting to Download Files from %s URLs' % len(Downloads))
+			tqdm.write('Attempting to Download Files from %s URLs' % len(Downloads))
 			getDownloads(Downloads)
 			newWebsites = set(readFile(URL_file))
 			if set(Websites) == set(newWebsites):
 				run = False
 			else:
 				Websites = newWebsites
+	if Filter():
+		filter()
 	tqdm.write('\n Finished..')
 
 def getWords(): 
@@ -75,9 +105,8 @@ def getWebsites(queries, filetypes):
 	websites = readFile(URL_file)
 	tqdm.write('Collecting URLs')
 	total_urls = len(queries) * ((len(filetypes) + 1) * Number_of_results)
-	for query in tqdm(queries):
-		search = []
-		search.extend(googleSearch(query, 0))
+	for query in tqdm(queries, unit="Queries"):
+		search = [].extend(googleSearch(query, 0))
 		for file in filetypes:
 			search.extend(googleSearch(file + " " +  query, 0))
 		search = set(search)
@@ -85,8 +114,7 @@ def getWebsites(queries, filetypes):
 		appendFile(search, URL_file) # this is weird, maybe just append with a array contained in loop
 		appendLine(query, Query_Blacklist_file)
 		websites.extend(search)
-	websites = set(websites)
-	return websites
+	return set(websites)
 
 def googleSearch(query, count):
 	top_results = []
@@ -110,25 +138,28 @@ def filterWebsites(urls, filetypes):
 	return downloads
 
 def getDownloads(downloads):
-	downloads = filterQueries(downloads, readFile(URL_blacklist_file))
 	tqdm.write('Downloading Files')
 	e_count = 0
-	for url in tqdm(downloads):
+	for url in tqdm(downloads, unit="URLs"):
 		if not os.path.exists(Downloads_folder + '/misc/' + b64encode(url)) and not os.path.exists(Downloads_folder + '/app/' + b64encode(url)):
 			try:
-				data = urllib2.urlopen(url)
-				write = data.read()
-				if 'application' in data.info().getheader('Content-Type'):
-					folder = Downloads_folder + '/app/'
-				else:
-					folder = Downloads_folder + '/misc/'
-				with open(folder + b64encode(url), 'wb') as f:
-					f.write(write)
-				appendLine(url, URL_blacklist_file)
+				getDownload(url)
 			except Exception as e:
-				appendLine(url, Errors_file)
+				appendLine(url + " : " + str(e), Errors_file)
 				e_count += 1
 	tqdm.write('\tFailed Downloading From %s URLs' % e_count)
+
+@timeout(5, os.strerror(errno.ETIMEDOUT))
+def getDownload(url):
+	data = urllib2.urlopen(url)
+	write = data.read()
+	if 'application' in data.info().getheader('Content-Type'):
+		folder = App_dir + '/'
+	else:
+		folder = Misc_dir + '/'
+	with open(folder + b64encode(url), 'wb') as f:
+		f.write(write)
+	appendLine(url, URL_blacklist_file)		
 
 def filterQueries(queries, blacklist):
 	tqdm.write('Filtering using Blacklist')
@@ -163,22 +194,10 @@ def makeFolder(folder_path):
 		os.makedirs(folder_path)
 
 if __name__ == '__main__':
-	import sys
-	import os
-
 	if not os.geteuid() == 0:
 		tqdm.write('\nscript must be run as root!\n')
 		sys.exit(1)
-
-	import urllib2	
-	import argparse
-	from itertools import combinations
-	from itertools import imap
-	from subprocess import call
-	from time import sleep
-	from tqdm import tqdm
-	from base64 import b64encode
-
+	
 	try:
 		from googlesearch import search as googlesearch
 	except ImportError:
@@ -186,22 +205,28 @@ if __name__ == '__main__':
 		sys.exit(1)
 
 	parser = argparse.ArgumentParser(description='google-term-scraper', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-	parser.add_argument('-S', '--search_only', default=False, dest='no_download', action='store_true', help='only search and collect urls, no downloads or screens')
-	parser.add_argument('-D', '--download_only', default=False, dest='no_search', action='store_true', help='only download from saved url list, no searching')
+	parser.add_argument('-S', '--search_only', default=False, dest='search_only', action='store_true', help='only search and collect urls, no downloading of file')
+	parser.add_argument('-D', '--download_only', default=False, dest='download_only', action='store_true', help='only download from saved url list, no searching')
+	parser.add_argument('-F', '--filter_only', default=False, dest='filter_only', action='store_true', help='only download from saved url list, no searching')
+	
 	parser.add_argument('-R', '--results', default=10, help='number of top results collected in google search')
 	parser.add_argument('-Ma', '--max_terms', default=10, help='max number of secondary search terms per google search')
 	parser.add_argument('-Mi', '--min_terms', default=2, help='min number of secondary search terms per google search')
 	
 	args = parser.parse_args()
-	download = not args.no_download
-	search = not args.no_search
+	Download, Search, Filter = [True, True, True]
+	if(args.download_only):
+		Search, Filter = [False, False]
+	elif(args.search_only):
+		Download, Filter = [False, False]
+	elif(args.filter_only):
+		Download, Search = [False, False]
 	Number_of_results = int(args.results)
 	Min_Number_of_terms = int(args.min_terms)
 	Max_Number_of_terms = int(args.max_terms)
 
-	makeFolder(Downloads_folder)
-	makeFolder(Downloads_folder + '/app/')
-	makeFolder(Downloads_folder + '/misc/')
+	[makeFolder(directory) for directory in dirs]
+
 	if not download and not search:
 		tqdm.write('k.')
 		sys.exit(1)

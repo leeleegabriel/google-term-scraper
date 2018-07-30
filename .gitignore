@@ -1,4 +1,5 @@
-./downloads
-./downloads/*
-./config
-
+downloads/*
+downloads/
+config/*
+config/
+**.txt
