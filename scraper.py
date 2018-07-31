@@ -30,7 +30,6 @@ def main():
 		tqdm.write('Loading Filetypes from %s' % Filetypes_file)
 
 		FileTypes = FileIO.readFile(Filetypes_file)
-
 		tqdm.write('\tLooking for: %s' %  (" ".join(str(x) for x in FileTypes)))
 
 		BaseQuery = str(" ".join(str(x) for x in Primary_words))			
@@ -86,15 +85,18 @@ def getWebsites(queries, filetypes):
 	websites = FileIO.readFile(URL_file)
 	tqdm.write('Collecting URLs')
 	total_urls = len(queries) * ((len(filetypes) + 1) * Number_of_results)
-	for query in tqdm(queries, unit="Queries"):
-		search = [] + list(googleSearch(query, 0))
-		for file in filetypes:
-			search.extend(googleSearch(file + " " +  query, 0))
-		search = set(search)
-		filterWebsites(search, filetypes)
-		FileIO.appendFile(search, URL_file) # this is weird, maybe just append with a array contained in loop
-		FileIO.appendLine(query, Query_Blacklist_file)
-		websites.extend(search)
+	with tqdm(total=total_urls, unit='URLs') as pbar:	
+		for query in queries:
+			search = [] + list(googleSearch(query, 0))
+			pbar.update(Number_of_results)
+			for file in filetypes:
+				search.extend(googleSearch(file + " " +  query, 0))
+				pbar.update(Number_of_results)
+			search = set(search)
+			filterWebsites(search, filetypes)
+			FileIO.appendFile(search, URL_file) # this is weird, maybe just append with a array contained in loop
+			FileIO.appendLine(query, Query_Blacklist_file)
+			websites.extend(search)
 	return set(websites)
 
 def googleSearch(query, count):
@@ -112,16 +114,13 @@ def googleSearch(query, count):
 	return top_results
 
 def filterWebsites(urls, filetypes):
-	downloads = []
-	for url in urls:
-		if any(ext in url for ext in filetypes):
-			downloads.append(url)
-	return downloads
+	downloads = [url for url in urls if ext in url]
+	return	downloads
 
 def getDownloads(downloads):
 	tqdm.write('Downloading Files')
 	e_count = 0
-	for url in tqdm(downloads, unit="URLs"):
+	for url in tqdm(downloads, unit="Files"):
 		if not os.path.exists(App_dir + '/' + b64encode(url)) and not os.path.exists(Misc_dir + '/' + b64encode(url)):
 			try:
 				getDownload(url)
@@ -130,7 +129,7 @@ def getDownloads(downloads):
 				e_count += 1
 	tqdm.write('\tFailed Downloading From %s URLs' % e_count)
 
-@timeout(5, os.strerror(errno.ETIMEDOUT))
+@timeout(10, os.strerror(errno.ETIMEDOUT))
 def getDownload(url):
 	data = urllib2.urlopen(url)
 	write = data.read()
@@ -163,7 +162,7 @@ if __name__ == '__main__':
 	DBase_dir = config.get('Dirs', 'DBase_dir').replace('\'', '')
 	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
 	App_dir = DBase_dir + '/unfiltered/app'
-	Misc_dir = DBase_dir + '/unfiltered/mis'
+	Misc_dir = DBase_dir + '/unfiltered/misc'
 	CDownloads_dir = CBase_dir + '/download'
 	CSearch_dir = CBase_dir + '/search'
 	CBlacklists_dir = CBase_dir + '/blacklists'

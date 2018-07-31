@@ -17,6 +17,7 @@ from os import listdir
 from os.path import isfile, join 
 from nltk.corpus import stopwords
 from collections import Counter
+from multiprocessing import Pool, Queue
 
 import FileIO
 
@@ -27,26 +28,35 @@ def start(WD, config):
 
 def Filter(Working_dir, config_file):
 	setupDirs(Working_dir, config_file)
+	global Parse_lib, Files, pbar
 	Parse_lib = getLib()
-	if Parse_lib != 'PyPDF2':
-		setupDataSet()
-	files = FileIO.getFiles(Unfiltered_dir + '/*')
+	Files = Queue().put([file for file in FileIO.getFiles(Unfiltered_dir + '/*')])
+	Files = FileIO.getFiles(Unfiltered_dir + '/*')
 	tqdm.write('Sorting files')
-	for file in tqdm(files):
-		Parse_lib = 'Textract'
-		text = cleanText(getText(file, Parse_lib))
-		Parse_lib = 'PyPDF2'
-		if text == 'Error':
-			tqdm.write('Error with File : %s' % file)
-			moveFile(file, Error_dir + '/' + file.split('/')[:-1])
-		elif Parse_lib =='PyPDF2':
-			simple_analysis(file, text)
-		else:
-			pass
-			#full_analysis(file, text)
+	pool = Pool(4)
+	pbar = tqdm(total=len(Files))
+	for file in Files:
+		pool.apply_async(worker, args=(file,), callback=showProg)
+	pool.close()
+	pool.join()
+
+def showProg(*a):
+	pbar.update()
+
+def worker(file):
+	text = cleanText(getText(file, Parse_lib))
+	a = 1
+	if text == 'Error':
+		moveFile(file, Error_dir + '/' + file.split('/')[:-1])
+	else:
+		simple_analysis(file, text)
+		# elif Parse_lib =='PyPDF2':
+		# 	simple_analysis(file, text)
+		# else:
+		# 	#full_analysis(file, text)
+	return a
 
 def getText(file, lib):
-	tqdm.write(file)
 	try:
 		if lib == 'Textract':
 			import textract
