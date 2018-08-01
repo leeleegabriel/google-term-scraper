@@ -19,7 +19,7 @@ from nltk.corpus import stopwords
 from collections import Counter
 from multiprocessing import Pool, Queue
 
-import FileIO
+import Helper
 
 SA_count = 32
 
@@ -30,13 +30,12 @@ def Filter(Working_dir, config_file):
 	setupDirs(Working_dir, config_file)
 	global Parse_lib, Files, pbar
 	Parse_lib = getLib()
-	Files = Queue().put([file for file in FileIO.getFiles(Unfiltered_dir + '/*')])
-	Files = FileIO.getFiles(Unfiltered_dir + '/*')
+	#Files = Queue().put([file for file in Helper.getFiles(Unfiltered_dir + '/*')])
+	Files = Helper.getFiles(Unfiltered_dir + '/*')
 	tqdm.write('Sorting files')
 	pool = Pool(4)
 	pbar = tqdm(total=len(Files))
-	for file in Files:
-		pool.apply_async(worker, args=(file,), callback=showProg)
+	res = [pool.apply_async(worker, args=(file,), callback=showProg) for file in Files]
 	pool.close()
 	pool.join()
 
@@ -50,10 +49,6 @@ def worker(file):
 		moveFile(file, Error_dir + '/' + file.split('/')[:-1])
 	else:
 		simple_analysis(file, text)
-		# elif Parse_lib =='PyPDF2':
-		# 	simple_analysis(file, text)
-		# else:
-		# 	#full_analysis(file, text)
 	return a
 
 def getText(file, lib):
@@ -74,14 +69,11 @@ def getText(file, lib):
 	return text 
 
 def cleanText(text):
-	#strip,  convert to lower, removes punctuation, removes non ascii text, removes stop words, spelling corrections
-	#TODO: remove unique and uncommon words, maybe remove corrections
 	stop = stopwords.words('english')
 	filtered = str(text).lower().replace('[^\w\s]','').replace('\n', ' ')
 	filtered = ''.join(x for x in filtered if x in string.printable)
 	filtered = ' '.join(word for word in filtered.split() if not word in stop)
 	count = Counter(filtered).most_common(10)
-	#filtered = str(TextBlob(filtered).correct())
 	return filtered
 
 def simple_analysis(file, text):
@@ -90,29 +82,7 @@ def simple_analysis(file, text):
 		dest = Hit_dir + '/' + file.split('/')[-1] 
 	else:
 		dest = Miss_dir + '/' + file.split('/')[-1] 
-	FileIO.moveFile(file, dest)
-
-def full_analysis(file, text, dictionary, tf_idf):
-	pass
-	# doc = [words for words in word_tokenize(text)]
-	# query_doc = dictionary.doc2bow(query_doc)
-	# query_doc_tf_idf = tf_idf[query_doc]
-	# print(query_doc)
-	# print(query_doc_tf_idf)
-	# print(sims[query_doc_tf_idf])
-
-def setupDataSet():
-	pass
-	# global dictionary, tf_idf, sims
-	# files = FileIO.getFiles(Dataset_dir + '/*')
-	# docs = [cleanText(getText(f)) for f in files]
-	# tokens = [[word for word in word_tokenize(text)] for text in docs]
-	# dictionary = gensim.corpora.Dictionary(gen_docs)
-	# corpus = [dictionary.doc2bow(gen_doc) for gen_doc in gen_docs]
-	# tf_idf = gensim.models.TfidModel(corpus)
-	# sims = gensim.similarities.Similarity('/usr/workdir/',tf_idf[corpus], num_features=len(dictionary))
-	# print(sims)
-	# print((type(sims)))
+	Helper.moveFile(file, dest)
 
 def readTerms():
 	with open(Words_file, 'r') as f:
@@ -137,7 +107,7 @@ def setupDirs(Working_dir, Config_file):
 
 	Words_file = CSearch_dir + '/words.txt'
 	
-	[FileIO.makeFolder(folder) for folder in [DBase_dir, CBase_dir, Filtered_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Dataset_dir, CSearch_dir]]
+	[Helper.makeFolder(folder) for folder in [DBase_dir, CBase_dir, Filtered_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Dataset_dir, CSearch_dir]]
 
 def getLib():
 	try:

@@ -15,7 +15,8 @@ from tqdm import tqdm
 from base64 import b64encode
 
 import lib.Filter as Sorter
-import lib.FileIO as FileIO
+import lib.Helper as Helper
+import lib.Downloader as Downloader
 from lib.timeout import timeout
 
 Config_file = './config/config.txt'
@@ -29,25 +30,14 @@ def main():
 		tqdm.write('\t%s Primary Words, %s Secondary words' % (len(Primary_words), len(Secondary_words)))
 		tqdm.write('Loading Filetypes from %s' % Filetypes_file)
 
-		FileTypes = FileIO.readFile(Filetypes_file)
+		FileTypes = Helper.readFile(Filetypes_file)
 		tqdm.write('\tLooking for: %s' %  (" ".join(str(x) for x in FileTypes)))
 
 		BaseQuery = str(" ".join(str(x) for x in Primary_words))			
-		Queries = filterQueries(getQueries(BaseQuery, Secondary_words), FileIO.readFile(Query_Blacklist_file))
+		Queries = filterQueries(getQueries(BaseQuery, Secondary_words), Helper.readFile(Query_Blacklist_file))
 		Websites = getWebsites(Queries, FileTypes)
-	elif(Download):
-		Websites = FileIO.readFile(URL_file)
 	if Download:
-		run = True
-		while run:
-			Downloads = filterQueries(Websites, FileIO.readFile(URL_blacklist_file))
-			tqdm.write('Attempting to Download Files from %s URLs' % len(Downloads))
-			getDownloads(Downloads)
-			newWebsites = set(FileIO.readFile(URL_file))
-			if set(Websites) == set(newWebsites):
-				run = False
-			else:
-				Websites = newWebsites
+		Downloader.start(os.path.abspath('.'), Config_file)
 	if Filter:
 		Sorter.start(os.path.abspath('.'), Config_file)
 	tqdm.write('\n Finished..')
@@ -82,7 +72,8 @@ def getQueries(base_query, secondary_words):
 	return queries
 
 def getWebsites(queries, filetypes):
-	websites = FileIO.readFile(URL_file)
+	websites = set(Helper.readFile(URL_file))
+	Helper.writeFile(websites, URL_file) # this is weird, maybe just append with a array contained in loop
 	tqdm.write('Collecting URLs')
 	total_urls = len(queries) * ((len(filetypes) + 1) * Number_of_results)
 	with tqdm(total=total_urls, unit='URLs') as pbar:	
@@ -94,10 +85,9 @@ def getWebsites(queries, filetypes):
 				pbar.update(Number_of_results)
 			search = set(search)
 			filterWebsites(search, filetypes)
-			FileIO.appendFile(search, URL_file) # this is weird, maybe just append with a array contained in loop
-			FileIO.appendLine(query, Query_Blacklist_file)
+			Helper.appendFile(search, URL_file) # this is weird, maybe just append with a array contained in loop
+			Helper.appendLine(query, Query_Blacklist_file)
 			websites.extend(search)
-	return set(websites)
 
 def googleSearch(query, count):
 	top_results = []
@@ -125,7 +115,7 @@ def getDownloads(downloads):
 			try:
 				getDownload(url)
 			except Exception as e:
-				FileIO.appendLine(url + " : " + str(e), Errors_file)
+				Helper.appendLine(url + " : " + str(e), Errors_file)
 				e_count += 1
 	tqdm.write('\tFailed Downloading From %s URLs' % e_count)
 
@@ -139,11 +129,7 @@ def getDownload(url):
 		folder = Misc_dir + '/'
 	with open(folder + b64encode(url), 'wb') as f:
 		f.write(write)
-	FileIO.appendLine(url, URL_blacklist_file)		
-
-def filterQueries(queries, blacklist):
-	tqdm.write('Filtering using Blacklist')
-	return [x for x in tqdm(queries) if x not in blacklist]
+	Helper.appendLine(url, URL_blacklist_file)		
 
 if __name__ == '__main__':
 	if not os.geteuid() == 0:
@@ -200,5 +186,5 @@ if __name__ == '__main__':
 	Min_Number_of_terms = int(args.min_terms)
 	Max_Number_of_terms = int(args.max_terms)
 
-	[FileIO.makeFolder(directory) for directory in dirs]
+	[Helper.makeFolder(directory) for directory in dirs]
 	main()
