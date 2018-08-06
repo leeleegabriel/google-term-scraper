@@ -4,6 +4,7 @@
 
 import os
 import glob
+import sqlite3
 from tqdm import tqdm
 
 def readFile(file_path):
@@ -13,22 +14,6 @@ def readFile(file_path):
 		file = f.readlines()
 		file = [x.strip() for x in file]
 	return file
-
-def appendFile(data, file_path):
-	if not os.path.exists(file_path):
-		open(file_path, 'w')
-	with open(file_path, 'a') as f:
-		[f.write(line + '\n') for line in data]
-
-def appendLine(data, file_path):
-	if not os.path.exists(file_path):
-		open(file_path, 'w')
-	with open(file_path, 'a') as f:
-		f.write(data + '\n')
-
-def writeFile(data, file_path):
-	with open(file_path, 'w') as f:
-		[f.write(line + '\n') for line in data]
 
 def moveFile(src, dest):
 	tqdm.moving(src)
@@ -44,3 +29,11 @@ def makeFolder(folder_path):
 def filterQueries(queries, blacklist):
 	tqdm.write('Filtering using Blacklist')
 	return [x for x in tqdm(queries) if x not in blacklist]
+
+# def insertData(db, table, column, data):
+# 	conn = sqlite3.connect(db)
+# 	c = conn.cursor()
+# 	stmt = """INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % (table, column)
+# 	[c.execute(stmt,  (row,)) for row in data]
+# 	conn.commit()
+# 	conn.close()

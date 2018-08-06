@@ -6,66 +6,44 @@
 #from nltk.tokenize import word_tokenize
 #from textblob import TextBlob
 #import pandas as pd
-import os 
-import shutil
-import sys
 import string
-import Settings 
 import configparser
+import os
 from tqdm import tqdm
 from os import listdir
-from os.path import isfile, join 
 from nltk.corpus import stopwords
-from collections import Counter
-from multiprocessing import Pool, Queue
 
 import Helper
 
 SA_count = 32
 
-def start(WD, config):
-	Filter(WD, config)
+def start(Working_dir, Config_file):
+	getDirs(Working_dir, Config_file)
+	Filter()
 
-def Filter(Working_dir, config_file):
-	setupDirs(Working_dir, config_file)
-	global Parse_lib, Files, pbar
-	Parse_lib = getLib()
-	#Files = Queue().put([file for file in Helper.getFiles(Unfiltered_dir + '/*')])
+def Filter():
 	Files = Helper.getFiles(Unfiltered_dir + '/*')
 	tqdm.write('Sorting files')
-	pool = Pool(4)
-	pbar = tqdm(total=len(Files))
-	res = [pool.apply_async(worker, args=(file,), callback=showProg) for file in Files]
-	pool.close()
-	pool.join()
-
-def showProg(*a):
-	pbar.update()
-
-def worker(file):
-	text = cleanText(getText(file, Parse_lib))
-	a = 1
-	if text == 'Error':
-		moveFile(file, Error_dir + '/' + file.split('/')[:-1])
-	else:
-		simple_analysis(file, text)
-	return a
+	for file in tqdm(Files, unit='Files'):
+		text = cleanText(getText(file))
+		if text == 'Error':
+			Helper.moveFile(file, Error_dir + '/' + file.split('/')[:-1])
+		else:
+			dest = simple_analysis(file, text)
+		Helper.moveFile(file, dest)
 
 def getText(file, lib):
 	try:
-		if lib == 'Textract':
-			import textract
-			text =  textract.process(file)
-		elif lib == 'Tika':
+		import textract
+		text =  textract.process(file)
+	except KeyboardInterrupt:
+		raise
+	except Exception:
+		try:
 			from tika import parser
 			text = parser.from_file(file)['content']
-		else:
-			import PyPDF2
-			with open(file, 'rb') as f:
-				pdfReader = PyPDF2.PdfFileReader(f)
-				text =(" ".join(pdfReader.getPage(page).extractText()) for page in range(0, pdfReader.getNumPages()))
-	except Exception as e:
-		text = 'Error'
+		except Exception:
+			text = 'Error'
 	return text 
 
 def cleanText(text):
@@ -73,7 +51,7 @@ def cleanText(text):
 	filtered = str(text).lower().replace('[^\w\s]','').replace('\n', ' ')
 	filtered = ''.join(x for x in filtered if x in string.printable)
 	filtered = ' '.join(word for word in filtered.split() if not word in stop)
-	count = Counter(filtered).most_common(10)
+	#count = Counter(filtered).most_common(10)
 	return filtered
 
 def simple_analysis(file, text):
@@ -82,15 +60,15 @@ def simple_analysis(file, text):
 		dest = Hit_dir + '/' + file.split('/')[-1] 
 	else:
 		dest = Miss_dir + '/' + file.split('/')[-1] 
-	Helper.moveFile(file, dest)
+	return dest
 
 def readTerms():
 	with open(Words_file, 'r') as f:
 		terms = [x.strip() for x in f.readlines()]
 	return terms
 
-def setupDirs(Working_dir, Config_file):
-	global DBase_dir, CBase_dir, Filtered_dir, Hit_dir, Miss_dir, Unfiltered_dir, Dataset_dir, Words_file
+def getDirs(Working_dir, Config_file):
+	global Hit_dir, Miss_dir, Unfiltered_dir, Error_dir, Words_file
 	os.chdir(Working_dir)
 	config = configparser.ConfigParser()
 	config.read(Config_file)
@@ -102,30 +80,9 @@ def setupDirs(Working_dir, Config_file):
 	Miss_dir = Filtered_dir + '/miss'
 	Error_dir = Filtered_dir + '/error'
 	Unfiltered_dir = DBase_dir + '/unfiltered/app'
-	Dataset_dir = DBase_dir + '/dataset'
 	CSearch_dir = CBase_dir + '/search'
 
 	Words_file = CSearch_dir + '/words.txt'
-	
-	[Helper.makeFolder(folder) for folder in [DBase_dir, CBase_dir, Filtered_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Dataset_dir, CSearch_dir]]
-
-def getLib():
-	try:
-		import textract
-		return 'Textract'
-	except:
-		print('Error Importing Textract, trying tika')
-		try:
-			from tika import parser
-			return 'Tika'
-		except:
-			print('Error Importing Tika, trying PyPDF2')
-			try:
-				import PyPDF2
-				return 'PyPDF2'
-			except:
-				print('Error Importing PyPDF2, exiting')
-				sys.exit(0)
 
 if __name__== "__main__":
-	Filter(os.path.abspath('..'),'./config/config.txt')
+	start(os.path.abspath('..'),'./config/config.txt')
