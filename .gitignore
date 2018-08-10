@@ -1,4 +1,6 @@
 downloads/*
 config/*
 **.txt
+**.db
+**.pyc
 !config/config.txt

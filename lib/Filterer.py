@@ -13,25 +13,39 @@ from tqdm import tqdm
 from os import listdir
 from nltk.corpus import stopwords
 
-import Helper
+import lib.Helper as Helper
 
 SA_count = 32
 
 def start(Working_dir, Config_file):
-	getDirs(Working_dir, Config_file)
-	Filter()
+	os.chdir(Working_dir)
 
-def Filter():
+	global Hit_dir, Miss_dir, Words_file
+
+	config = configparser.ConfigParser()
+	config.read(Config_file)
+	DBase_dir = config.get('Dirs', 'DBase_dir').replace('\'', '')
+	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
+
+	Hit_dir = DBase_dir + '/filtered'+ '/hit'
+	Miss_dir = DBase_dir + '/filtered' + '/miss'
+	Error_dir = DBase_dir + '/filtered'+ '/error'
+	Unfiltered_dir = DBase_dir + '/unfiltered/app'
+	CSearch_dir = CBase_dir + '/search'
+
+	Words_file = CSearch_dir + '/words.txt'
+
 	Files = Helper.getFiles(Unfiltered_dir + '/*')
-	tqdm.write('Sorting files')
+	tqdm.write(' Sorting files')
 	for file in tqdm(Files, unit='Files'):
-		text = cleanText(getText(file))
-		if text == 'Error':
-			Helper.moveFile(file, Error_dir + '/' + file.split('/')[:-1])
-		else:
+		try:
+			text = cleanText(getText(file))
 			dest = simple_analysis(file, text)
-		Helper.moveFile(file, dest)
-
+			Helper.moveFile(file, dest)
+		except KeyboardInterrupt:
+			raise
+		except ParseError:
+			Helper.moveFile(file, Error_dir + '/' + file.split('/')[:-1])
 def getText(file, lib):
 	try:
 		import textract
@@ -42,8 +56,11 @@ def getText(file, lib):
 		try:
 			from tika import parser
 			text = parser.from_file(file)['content']
+		except KeyboardInterrupt:
+			raise
 		except Exception:
-			text = 'Error'
+			raise ParseError('Whoops')
+
 	return text 
 
 def cleanText(text):
@@ -55,7 +72,7 @@ def cleanText(text):
 	return filtered
 
 def simple_analysis(file, text):
-	terms = [t.replace('*', '').lower() for t in readTerms()]
+	terms = [t.replace('*', '').lower() for t in Helper.readFile(Words_file)]
 	if sum(text.count(term) for term in terms) > SA_count:
 		dest = Hit_dir + '/' + file.split('/')[-1] 
 	else:
@@ -67,22 +84,9 @@ def readTerms():
 		terms = [x.strip() for x in f.readlines()]
 	return terms
 
-def getDirs(Working_dir, Config_file):
-	global Hit_dir, Miss_dir, Unfiltered_dir, Error_dir, Words_file
-	os.chdir(Working_dir)
-	config = configparser.ConfigParser()
-	config.read(Config_file)
-	DBase_dir = config.get('Dirs', 'DBase_dir').replace('\'', '')
-	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
-
-	Filtered_dir = DBase_dir + '/filtered'
-	Hit_dir = Filtered_dir + '/hit'
-	Miss_dir = Filtered_dir + '/miss'
-	Error_dir = Filtered_dir + '/error'
-	Unfiltered_dir = DBase_dir + '/unfiltered/app'
-	CSearch_dir = CBase_dir + '/search'
-
-	Words_file = CSearch_dir + '/words.txt'
+class ParseError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
 
 if __name__== "__main__":
 	start(os.path.abspath('..'),'./config/config.txt')
