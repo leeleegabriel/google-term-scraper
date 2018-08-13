@@ -1,0 +1,15 @@
+[Dirs]
+Download_dir = './downloads'
+Config_dir = './config'
+
+[File]
+DB = 'ScrapeDB.db'
+
+[Proxy_Handler]
+IP = '127.0.0.1'
+Port = 8888 
+
+[Timeouts]
+DB_timeout = 180
+Download_timeout = 60
+Filter_timeout = 300

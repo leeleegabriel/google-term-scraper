@@ -7,6 +7,7 @@ import glob
 import sqlite3
 from tqdm import tqdm
 
+
 def readFile(file_path):
 	if not os.path.exists(file_path):
 		open(file_path, 'w')
@@ -15,20 +16,35 @@ def readFile(file_path):
 		file = [x.strip() for x in file]
 	return file
 
+
 def moveFile(src, dest):
 	tqdm.moving(src)
 	os.rename(src, dest)
 
+
 def getFiles(directory):
 	return glob.glob(directory)
+
 
 def makeFolder(folder_path):
 	if not os.path.exists(folder_path):	
 		os.makedirs(folder_path)
 
+
 def filterQueries(queries, blacklist):
 	tqdm.write('Filtering using Blacklist')
 	return [x for x in tqdm(queries) if x not in blacklist]
+
+
+class ProxyError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
+class ParseError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
 
 # def insertData(db, table, column, data):
 # 	conn = sqlite3.connect(db)

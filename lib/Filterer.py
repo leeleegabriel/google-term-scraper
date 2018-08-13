@@ -1,11 +1,6 @@
 #!/usr/bin/python
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
-
-#from sklearn.feature_extraction.text import CountVectorizer
-#from nltk.tokenize import word_tokenize
-#from textblob import TextBlob
-#import pandas as pd
 import string
 import configparser
 import os
@@ -17,6 +12,7 @@ import lib.Helper as Helper
 
 SA_count = 32
 
+
 def start(Working_dir, Config_file):
 	os.chdir(Working_dir)
 
@@ -27,13 +23,12 @@ def start(Working_dir, Config_file):
 	DBase_dir = config.get('Dirs', 'DBase_dir').replace('\'', '')
 	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
 
-	Hit_dir = DBase_dir + '/filtered'+ '/hit'
-	Miss_dir = DBase_dir + '/filtered' + '/miss'
-	Error_dir = DBase_dir + '/filtered'+ '/error'
-	Unfiltered_dir = DBase_dir + '/unfiltered/app'
-	CSearch_dir = CBase_dir + '/search'
+	Hit_dir = config['Hit_dir']
+	Miss_dir = config['Miss_dir']
+	Error_dir = config['Error_dir']
+	Unfiltered_dir = config['App_dir']
 
-	Words_file = CSearch_dir + '/words.txt'
+	Words_file = config['Words']
 
 	Files = Helper.getFiles(Unfiltered_dir + '/*')
 	tqdm.write(' Sorting files')
@@ -46,10 +41,12 @@ def start(Working_dir, Config_file):
 			raise
 		except ParseError:
 			Helper.moveFile(file, Error_dir + '/' + file.split('/')[:-1])
+
+
 def getText(file, lib):
 	try:
 		import textract
-		text =  textract.process(file)
+		text = textract.process(file)
 	except KeyboardInterrupt:
 		raise
 	except Exception:
@@ -59,17 +56,19 @@ def getText(file, lib):
 		except KeyboardInterrupt:
 			raise
 		except Exception:
-			raise ParseError('Whoops')
+			raise Helper.ParseError('Whoops')
 
-	return text 
+	return text
+
 
 def cleanText(text):
 	stop = stopwords.words('english')
-	filtered = str(text).lower().replace('[^\w\s]','').replace('\n', ' ')
+	filtered = str(text).lower().replace('[^\w\s]', '').replace('\n', ' ')
 	filtered = ''.join(x for x in filtered if x in string.printable)
-	filtered = ' '.join(word for word in filtered.split() if not word in stop)
-	#count = Counter(filtered).most_common(10)
+	filtered = ' '.join(word for word in filtered.split() if not in stop)
+	# count = Counter(filtered).most_common(10)
 	return filtered
+
 
 def simple_analysis(file, text):
 	terms = [t.replace('*', '').lower() for t in Helper.readFile(Words_file)]
@@ -79,14 +78,12 @@ def simple_analysis(file, text):
 		dest = Miss_dir + '/' + file.split('/')[-1] 
 	return dest
 
+
 def readTerms():
 	with open(Words_file, 'r') as f:
 		terms = [x.strip() for x in f.readlines()]
 	return terms
 
-class ParseError(Exception):
-    def __init__(self, message):
-        super().__init__(message)
 
-if __name__== "__main__":
-	start(os.path.abspath('..'),'./config/config.txt')
+if __name__ == "__main__":
+	start(os.path.abspath('..'), './config/config.txt')

@@ -3,4 +3,7 @@ config/*
 **.txt
 **.db
 **.pyc
-!config/config.txt
+*.sublime-project
+*.cfg
+test.py
+!config.txt
