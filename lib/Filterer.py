@@ -2,10 +2,8 @@
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
 import string
-import configparser
 import os
-from tqdm import tqdm
-from os import listdir
+import logging
 from nltk.corpus import stopwords
 
 import lib.Helper as Helper
@@ -13,15 +11,13 @@ import lib.Helper as Helper
 SA_count = 32
 
 
-def start(Working_dir, Config_file):
-	os.chdir(Working_dir)
+def start(config, log, handler):
+	os.chdir(config['Abspath'])
 
-	global Hit_dir, Miss_dir, Words_file
+	global Hit_dir, Miss_dir, Words_file, logger
 
-	config = configparser.ConfigParser()
-	config.read(Config_file)
-	DBase_dir = config.get('Dirs', 'DBase_dir').replace('\'', '')
-	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
+	handler.setFormatter(logging.Formatter('[Filter] %(message)s '))
+	logger = log
 
 	Hit_dir = config['Hit_dir']
 	Miss_dir = config['Miss_dir']
@@ -31,16 +27,22 @@ def start(Working_dir, Config_file):
 	Words_file = config['Words']
 
 	Files = Helper.getFiles(Unfiltered_dir + '/*')
-	tqdm.write(' Sorting files')
-	for file in tqdm(Files, unit='Files'):
-		try:
-			text = cleanText(getText(file))
-			dest = simple_analysis(file, text)
-			Helper.moveFile(file, dest)
-		except KeyboardInterrupt:
-			raise
-		except ParseError:
-			Helper.moveFile(file, Error_dir + '/' + file.split('/')[:-1])
+	logger.info(' Sorting files')
+	if Files:
+		for file in Files:
+			try:
+				text = cleanText(getText(file))
+				dest = simple_analysis(file, text)
+				Helper.moveFile(file, dest)
+			except KeyboardInterrupt:
+				logger.debug('Detected KeyboardInterrupt')
+				raise
+			except Helper.ParseError:
+				logger.error('Encountered Parse Error with %s', file)
+				Helper.moveFile(file, Error_dir + '/' + file.split('/')[:-1])
+		logger.info(' Finished filtering filtes')
+	else:
+		logger.info(' No files to filter')
 
 
 def getText(file, lib):
@@ -48,12 +50,14 @@ def getText(file, lib):
 		import textract
 		text = textract.process(file)
 	except KeyboardInterrupt:
+		logger.debug('Detected KeyboardInterrupt')
 		raise
 	except Exception:
 		try:
 			from tika import parser
 			text = parser.from_file(file)['content']
 		except KeyboardInterrupt:
+			logger.debug('Detected KeyboardInterrupt')
 			raise
 		except Exception:
 			raise Helper.ParseError('Whoops')
@@ -65,7 +69,7 @@ def cleanText(text):
 	stop = stopwords.words('english')
 	filtered = str(text).lower().replace('[^\w\s]', '').replace('\n', ' ')
 	filtered = ''.join(x for x in filtered if x in string.printable)
-	filtered = ' '.join(word for word in filtered.split() if not in stop)
+	filtered = ' '.join(word for word in filtered.split() if word not in stop)
 	# count = Counter(filtered).most_common(10)
 	return filtered
 
@@ -73,9 +77,9 @@ def cleanText(text):
 def simple_analysis(file, text):
 	terms = [t.replace('*', '').lower() for t in Helper.readFile(Words_file)]
 	if sum(text.count(term) for term in terms) > SA_count:
-		dest = Hit_dir + '/' + file.split('/')[-1] 
+		dest = Hit_dir + '/' + file.split('/')[-1]
 	else:
-		dest = Miss_dir + '/' + file.split('/')[-1] 
+		dest = Miss_dir + '/' + file.split('/')[-1]
 	return dest
 
 

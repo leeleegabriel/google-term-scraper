@@ -2,12 +2,9 @@
 Download_dir = './downloads'
 Config_dir = './config'
 
-[File]
+[Files]
 DB = 'ScrapeDB.db'
-
-[Proxy_Handler]
-IP = '127.0.0.1'
-Port = 8888 
+Word_list = 'words.txt'
 
 [Timeouts]
 DB_timeout = 180

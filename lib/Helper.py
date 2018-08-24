@@ -4,8 +4,7 @@
 
 import os
 import glob
-import sqlite3
-from tqdm import tqdm
+# from tqdm import tqdm
 
 
 def readFile(file_path):
@@ -18,7 +17,6 @@ def readFile(file_path):
 
 
 def moveFile(src, dest):
-	tqdm.moving(src)
 	os.rename(src, dest)
 
 
@@ -27,13 +25,8 @@ def getFiles(directory):
 
 
 def makeFolder(folder_path):
-	if not os.path.exists(folder_path):	
+	if not os.path.exists(folder_path):
 		os.makedirs(folder_path)
-
-
-def filterQueries(queries, blacklist):
-	tqdm.write('Filtering using Blacklist')
-	return [x for x in tqdm(queries) if x not in blacklist]
 
 
 class ProxyError(Exception):

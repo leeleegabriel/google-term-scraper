@@ -5,22 +5,27 @@
 import os
 import os.path
 import errno
-import configparser
 import sqlite3
+import logging
 from time import sleep
 from urllib.request import urlopen
-from tqdm import tqdm
+# from tqdm import tqdm
 from base64 import b64encode
 
 from lib.timeout import timeout
 
 DB_timeout = 600
 
+# TODO: split start into multiple methods
 
-def start(config):
+
+def start(config, log, handler):
 	os.chdir(config['Abspath'])
 
-	global App_dir, Misc_dir
+	global App_dir, Misc_dir, logger
+
+	handler.setFormatter(logging.Formatter('[Download] %(message)s '))
+	logger = log
 
 	DB = config['DB_file']
 	Filter_errors = config['Filter_errors']
@@ -29,14 +34,15 @@ def start(config):
 
 	conn = sqlite3.connect(DB)
 	c = conn.cursor()
-	tqdm.write(' Getting URLs from DB')
+
+	logger.info(' Getting URLs from DB')
 	for x in range(0, DB_timeout):
 		try:
 			if Filter_errors:
 				c.execute("""SELECT url FROM URLs WHERE url NOT IN(SELECT url FROM Used_URLs) AND url NOT IN(SELECT url FROM Download_Errors)""")
 			else:
 				c.execute("""SELECT url FROM URLs WHERE url NOT IN(SELECT url FROM Used_URLs)""")
-			Downloads = [line[0] for line in  c.fetchall()]
+			Downloads = [line[0] for line in c.fetchall()]
 		except sqlite3.OperationalError as e:
 			if "locked" in str(e):
 				sleep(1)
@@ -47,14 +53,19 @@ def start(config):
 	conn.close()
 
 	if Downloads:
-		tqdm.write(' Attempting to Download Files from %s URLs' % len(Downloads))
-		for url in tqdm(Downloads):
+		logger.info(' Attempting to Download Files from %s URLs' % len(Downloads))
+		for url in Downloads:
 			try:
 				if not os.path.isfile(App_dir + '/' + b64encode(url)) and not os.path.isfile(Misc_dir + '/' + b64encode(url)):
+					logger.debug('Downloading %s', url)
 					getDownload(DB, url)
+				else:
+					logger.debug('Already downloaded %s', url)
 			except KeyboardInterrupt:
+				logger.debug('Detected KeyboardInterrupt')
 				raise
 			except Exception as error:
+				logger.debug('Logging download error: %s', url)
 				conn = sqlite3.connect(DB)
 				c = conn.cursor()
 				for x in range(0, DB_timeout):
@@ -65,12 +76,14 @@ def start(config):
 						if "locked" in str(e):
 							sleep(1)
 						else:
+							logger.error(str(e))
 							raise
 					else:
 						break
 				conn.close()
+		logger.info(' Finished downloading files')
 	else:
-		tqdm.write(' No URLs Found')
+		logger.info(' No new URLs found')
 
 
 @timeout(10, os.strerror(errno.ETIMEDOUT))
@@ -81,10 +94,11 @@ def getDownload(DB, url):
 		folder = App_dir + '/'
 	else:
 		folder = Misc_dir + '/'
+	logger.debug('Saving %s to %s', url, folder)
 	with open(folder + b64encode(url), 'wb') as f:
 		f.write(write)
 
-	conn = sqlite3.connect(DB)	
+	conn = sqlite3.connect(DB)
 	c = conn.cursor()
 	for x in range(0, DB_timeout):
 		try:
@@ -94,6 +108,7 @@ def getDownload(DB, url):
 			if "locked" in str(e):
 				sleep(1)
 			else:
+				logger.error(e.message)
 				raise
 		else:
 			break

@@ -2,16 +2,18 @@
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
 
-import sys
 import os
 import sqlite3
 import urllib.request as request
-import html5lib
+# import html5lib
 import random
+import logging
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 from googlesearch import search
 from itertools import combinations
 from time import sleep
-from tqdm import tqdm
+# from tqdm import tqdm
 from bs4 import BeautifulSoup
 from urllib.parse import urlencode, quote_plus
 
@@ -22,40 +24,37 @@ Proxy_count = 25
 DB_timeout = 600
 
 
-def start(config):
+def start(config, log, handler):
 	os.chdir(config['Abspath'])
 
-	global Number_of_Results
+	global DB, Number_of_Results, logger
+
+	handler.setFormatter(logging.Formatter('[Scrape] %(message)s '))
+	logger = log
 
 	DB = config['DB_file']
 	Max_number_of_Terms = config['Max']
 	Min_Number_of_Terms = config['Min']
 	Number_of_Results = config['Results']
 
-	# this whole importing the config thing is garbage wtf am i doing
-	# TODO: More elegant solution
-
-	CBase_dir = cparser.get('Dirs', 'Config_dir').replace('\'', '')
-
 	Filetypes_file = config['Filetypes']
 	Word_file = config['Words']
 
 	Primary_words, Secondary_words = getWords(Word_file)
-	tqdm.write(' Loaded Words from %s' % Word_file)
-	tqdm.write('\t%s Primary Words, %s Secondary words' % (len(Primary_words), len(Secondary_words)))
+	logger.info(' Loaded Words from %s' % Word_file)
+	logger.info('\t%s Primary Words, %s Secondary words' % (len(Primary_words), len(Secondary_words)))
 
-	Filetypes_file = CBase_dir + '/search/filetypes.txt'
 	FileTypes = Helper.readFile(Filetypes_file)
-	tqdm.write(' Loaded Filetypes from %s' % Filetypes_file)
-	tqdm.write('\tLooking for: %s' % (" ".join(str(x) for x in FileTypes)))
+	logger.info(' Loaded Filetypes from %s' % Filetypes_file)
+	logger.info('\tLooking for: %s' % (" ".join(str(x) for x in FileTypes)))
 
-	BaseQuery = str(" ".join(str(x) for x in Primary_words))		
-	Queries = getQueries(DB, BaseQuery, Secondary_words, Max_number_of_Terms, Min_Number_of_Terms)
+	BaseQuery = str(" ".join(str(x) for x in Primary_words))
+	Queries = filterQueries(generateQueries(BaseQuery, Secondary_words, Max_number_of_Terms, Min_Number_of_Terms))
 
-	Scrape(DB, Queries, FileTypes)
+	Scrape(Queries, FileTypes)
 
 
-def getWords(Word_file): 
+def getWords(Word_file):
 	Primary_words = []
 	Secondary_words = []
 	with open(Word_file) as f:
@@ -69,9 +68,9 @@ def getWords(Word_file):
 	return Primary_words, Secondary_words
 
 
-def getQueries(DB, base_query, secondary_words, Max, Min): 
+def generateQueries(base_query, secondary_words, Max, Min):
 	queries = []
-	tqdm.write(' Generating Queries')
+	logger.info(' Generating Queries')
 	if len(secondary_words) < Max:
 		r_count = len(secondary_words)
 	else: 
@@ -81,106 +80,109 @@ def getQueries(DB, base_query, secondary_words, Max, Min):
 	else:
 		l_count = Min
 
-	for x in tqdm(range(l_count, r_count + 1)):
+	for x in range(l_count, r_count + 1):
 		queries.extend(["intext:" + base_query + " " + s for s in[" ".join(term) for term in combinations(secondary_words, x)]])
 
+	return queries
+
+
+def filterQueries(queries):
+	logger.info(' Inserting Queries into DB')
+	filtered_queries = []
 	conn = sqlite3.connect(DB)
 	c = conn.cursor()
-
-	tqdm.write(' Inserting Queries into DB')
+	c.execute("""create table Queries (query text PRIMARY KEY)""")
 	for x in range(0, DB_timeout):
 		try:
-			stmt = """INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('Queries', 'query')
+			stmt = """INSERT INTO %s (%s) VALUES (?)""" % ('Queries', 'query')
 			[c.execute(stmt, (row,)) for row in queries]
-			conn.commit()
-			break
-		except sqlite3.OperationalError as e:
-			if "locked" in str(e):
-				sleep(1)
-			else:
-				raise
-		else:
-			break
-
-	tqdm.write(' Filtering Queries')
-	for x in range(0, DB_timeout):
-		try:
+			stmt = """SELECT query FROM Queries WHERE query NOT IN (SELECT query FROM Used_Queries)"""
 			conn.row_factory = lambda cursor, row: row[0]
-			c = conn.cursor()
-			filtered_queries = c.execute("""SELECT query FROM Queries WHERE query NOT IN (SELECT query FROM Used_Queries)""").fetchall()
-			conn.close()
+			filtered_queries = c.execute(stmt).fetchall()
 			break
 		except sqlite3.OperationalError as e:
 			if "locked" in str(e):
 				sleep(1)
 			else:
+				logger.error(str(e))
 				raise
 		else:
 			break
-
 	conn.close()
-
 	return filtered_queries
 
 
-def Scrape(DB, queries, filetypes):
-	tqdm.write(' Finding %s Proxies' % Proxy_count)
-	Proxies = Proxy.getProxies(Proxy_count)
-	total_urls = len(queries) * ((len(filetypes) + 1) * Number_of_Results)
+def Scrape(queries, filetypes):
+	# total_urls = len(queries) * ((len(filetypes) + 1) * Number_of_Results)
 	i = 0
 
-	tqdm.write(' Collecting URLs')
-	with tqdm(total=total_urls, unit='URLs') as pbar:
+	logger.info(' Collecting URLs')
+	if queries:
 		for query in queries:
-			if i % 10 == 0 and i != 0:
-				Proxies = Proxy.getProxies(Proxy_count)
-			urls = [] + list(googleSearch(Proxies, query))
-			pbar.update(Number_of_Results)
-			for file in filetypes:
-				urls.append(googleSearch(Proxies, 'filtetype:' + file + ' ' + query))
-				pbar.update(Number_of_Results)
-
-			conn = sqlite3.connect(DB)
-			c = conn.cursor()
-
+			# if i % 10 == 0 and i != 0:
+			# 	Proxies = Proxy.getProxies(Proxy_count)
+			urls = [] + list(googleSearch(query))
+			[urls.append(googleSearch('filtetype:' + file + ' ' + query)) for file in filetypes]
 			if urls:
-				stmt = """INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('URLs', 'url')
-				for x in range(0, DB_timeout):
-					try:
-						[c.execute(stmt,  (row,)) for row in search]
-						conn.commit()
-					except sqlite3.OperationalError as e:
-						if "locked" in str(e):
-							sleep(1)
-						else:
-							raise
-					else:
-						break
-
-			stmt = """INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('Used_Queries', 'query')
-			for x in range(0, DB_timeout):
-				try:
-					c.execute(stmt, (query,))
-					conn.commit()
-				except sqlite3.OperationalError as e:
-					if "locked" in str(e):
-						sleep(1)
-					else:
-						raise
-				else:
-					break
-
-			conn.close()
+				insertURL(urls)
+				insertQuery(query)
+			else:
+				logger.debug('Found no urls with %s', query)
+			# insertQuery(query)
 			i += 1
+		logger.info(' Finished searching for urls')
+	else:
+		logger.info(' No new queries found')
 
 
-def googleSearch(Proxies, query):
-	url = 'https://www.google.com/search?' + urlencode({'q': query, 'num': Number_of_results}, quote_via=quote_plus)
-	req = request.Request(url, headers={'User-Agent' : getRandomHeader()})
-	for i in range(0, 25):
+def insertURL(urls):
+	conn = sqlite3.connect(DB)
+	c = conn.cursor()
+
+	stmt = """INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('URLs', 'url')
+	for x in range(0, DB_timeout):
 		try:
-			req.set_proxy(Proxies[i], 'http')
-			response = request.urlopen(req)
+			[c.execute(stmt, (row,)) for row in urls]
+			conn.commit()
+		except sqlite3.OperationalError as e:
+			if "locked" in str(e):
+				sleep(1)
+			else:
+				logger.error(e.message)
+				raise
+		else:
+			break
+	conn.close()
+
+
+def insertQuery(query):	
+	conn = sqlite3.connect(DB)
+	c = conn.cursor()
+
+	stmt = """INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('Used_Queries', 'query')
+	for x in range(0, DB_timeout):
+		try:
+			c.execute(stmt, (query,))
+			conn.commit()
+		except sqlite3.OperationalError as e:
+			if "locked" in str(e):
+				sleep(1)
+			else:
+				logger.error(str(message))
+				raise
+		else:
+			break
+	conn.close()
+
+
+def googleSearch(query):
+	url = 'https://www.google.com/search?' + urlencode({'q': query, 'num': Number_of_Results}, quote_via=quote_plus)
+	req = request.Request(url, headers={'User-Agent': getRandomHeader()})
+	proxies = Proxy.getProxies(Proxy_count)
+	for i in range(0, Proxy_count):
+		try:
+			req.set_proxy(random.choice(proxies), 'http')
+			response = urlopen(req)
 			soup = BeautifulSoup(response.read(), "html5lib")
 			links = soup.findAll("a")
 			url_list = []
@@ -189,11 +191,14 @@ def googleSearch(Proxies, query):
 				if "url?q=" in link_href and not "webcache" in link_href:
 				    url_list.append(link.get('href').split("?q=")[1].split("&sa=U")[0])
 			return url_list
-		except urllib.HTTPError as e:
+		except HTTPError as e:
 			pass
-		except Exception:
+		except URLError as e:
+			pass
+		except Exception as e:
+			logger.error(str(e))
 			raise
-	raise Helper.ProxyError('Ran out of Functional Proxies')
+	raise Helper.ProxyError('Failed Scraping attempts')
 
 
 def getRandomHeader():
