@@ -29,7 +29,7 @@ def start(config, log, handler):
 
 	global DB, Number_of_Results, logger
 
-	handler.setFormatter(logging.Formatter('[Scrape] %(message)s '))
+	handler.setFormatter(logging.Formatter('[Scrape] %(asctime)s : %(message)s '))
 	logger = log
 
 	DB = config['DB_file']
@@ -41,11 +41,11 @@ def start(config, log, handler):
 	Word_file = config['Words']
 
 	Primary_words, Secondary_words = getWords(Word_file)
-	logger.info(' Loaded Words from %s' % Word_file)
+	logger.info('Loaded Words from %s' % Word_file)
 	logger.info('\t%s Primary Words, %s Secondary words' % (len(Primary_words), len(Secondary_words)))
 
 	FileTypes = Helper.readFile(Filetypes_file)
-	logger.info(' Loaded Filetypes from %s' % Filetypes_file)
+	logger.info('Loaded Filetypes from %s' % Filetypes_file)
 	logger.info('\tLooking for: %s' % (" ".join(str(x) for x in FileTypes)))
 
 	BaseQuery = str(" ".join(str(x) for x in Primary_words))
@@ -70,7 +70,7 @@ def getWords(Word_file):
 
 def generateQueries(base_query, secondary_words, Max, Min):
 	queries = []
-	logger.info(' Generating Queries')
+	logger.info('Generating Queries')
 	if len(secondary_words) < Max:
 		r_count = len(secondary_words)
 	else: 
@@ -87,13 +87,13 @@ def generateQueries(base_query, secondary_words, Max, Min):
 
 
 def filterQueries(queries):
-	logger.info(' Inserting Queries into DB')
+	logger.info('Inserting Queries into DB')
 	filtered_queries = []
 	conn = sqlite3.connect(DB)
 	c = conn.cursor()
-	c.execute("""create table Queries (query text PRIMARY KEY)""")
 	for x in range(0, DB_timeout):
 		try:
+			c.execute("""create table Queries (query text PRIMARY KEY)""")
 			stmt = """INSERT INTO %s (%s) VALUES (?)""" % ('Queries', 'query')
 			[c.execute(stmt, (row,)) for row in queries]
 			stmt = """SELECT query FROM Queries WHERE query NOT IN (SELECT query FROM Used_Queries)"""
@@ -116,7 +116,7 @@ def Scrape(queries, filetypes):
 	# total_urls = len(queries) * ((len(filetypes) + 1) * Number_of_Results)
 	i = 0
 
-	logger.info(' Collecting URLs')
+	logger.info('Collecting URLs')
 	if queries:
 		for query in queries:
 			# if i % 10 == 0 and i != 0:
@@ -130,9 +130,9 @@ def Scrape(queries, filetypes):
 				logger.debug('Found no urls with %s', query)
 			# insertQuery(query)
 			i += 1
-		logger.info(' Finished searching for urls')
+		logger.info('Finished searching for urls')
 	else:
-		logger.info(' No new queries found')
+		logger.info('No new queries found')
 
 
 def insertURL(urls):
@@ -192,9 +192,9 @@ def googleSearch(query):
 				    url_list.append(link.get('href').split("?q=")[1].split("&sa=U")[0])
 			return url_list
 		except HTTPError as e:
-			pass
+			logger.debug(str(e))
 		except URLError as e:
-			pass
+			logger.debug(str(e))
 		except Exception as e:
 			logger.error(str(e))
 			raise
@@ -228,7 +228,3 @@ def getRandomHeader():
 		'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.1; Trident/4.0; .NET CLR 2.0.50727; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729)'
 	]
 	return random.choice(user_agent_list)
-
-
-if __name__ == "__main__":
-	start(os.path.abspath('..'), './config/config.txt', './config/ScrapeDB.db')

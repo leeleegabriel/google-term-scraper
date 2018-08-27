@@ -1,5 +1,6 @@
 downloads/*
 config/*
+lib/__pycache__/*
 **.txt
 **.db
 **.pyc

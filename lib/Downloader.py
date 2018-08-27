@@ -24,7 +24,7 @@ def start(config, log, handler):
 
 	global App_dir, Misc_dir, logger
 
-	handler.setFormatter(logging.Formatter('[Download] %(message)s '))
+	handler.setFormatter(logging.Formatter('[Download] %(asctime)s : %(message)s '))
 	logger = log
 
 	DB = config['DB_file']
@@ -35,7 +35,7 @@ def start(config, log, handler):
 	conn = sqlite3.connect(DB)
 	c = conn.cursor()
 
-	logger.info(' Getting URLs from DB')
+	logger.info('Getting URLs from DB')
 	for x in range(0, DB_timeout):
 		try:
 			if Filter_errors:
@@ -53,7 +53,7 @@ def start(config, log, handler):
 	conn.close()
 
 	if Downloads:
-		logger.info(' Attempting to Download Files from %s URLs' % len(Downloads))
+		logger.info('Attempting to Download Files from %s URLs' % len(Downloads))
 		for url in Downloads:
 			try:
 				if not os.path.isfile(App_dir + '/' + b64encode(url)) and not os.path.isfile(Misc_dir + '/' + b64encode(url)):
@@ -81,9 +81,9 @@ def start(config, log, handler):
 					else:
 						break
 				conn.close()
-		logger.info(' Finished downloading files')
+		logger.info('Finished downloading files')
 	else:
-		logger.info(' No new URLs found')
+		logger.info('No new URLs found')
 
 
 @timeout(10, os.strerror(errno.ETIMEDOUT))
@@ -113,7 +113,3 @@ def getDownload(DB, url):
 		else:
 			break
 	conn.close()
-
-
-if __name__ == "__main__":
-	start(os.path.abspath('..'), './config/config.txt', './config/ScrapeDB.db')

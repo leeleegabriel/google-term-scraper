@@ -16,7 +16,7 @@ def start(config, log, handler):
 
 	global Hit_dir, Miss_dir, Words_file, logger
 
-	handler.setFormatter(logging.Formatter('[Filter] %(message)s '))
+	handler.setFormatter(logging.Formatter('[Filter] %(asctime)s : %(message)s '))
 	logger = log
 
 	Hit_dir = config['Hit_dir']
@@ -27,7 +27,7 @@ def start(config, log, handler):
 	Words_file = config['Words']
 
 	Files = Helper.getFiles(Unfiltered_dir + '/*')
-	logger.info(' Sorting files')
+	logger.info('Sorting files')
 	if Files:
 		for file in Files:
 			try:
@@ -40,9 +40,9 @@ def start(config, log, handler):
 			except Helper.ParseError:
 				logger.error('Encountered Parse Error with %s', file)
 				Helper.moveFile(file, Error_dir + '/' + file.split('/')[:-1])
-		logger.info(' Finished filtering filtes')
+		logger.info('Finished filtering filtes')
 	else:
-		logger.info(' No files to filter')
+		logger.info('No files to filter')
 
 
 def getText(file, lib):
@@ -87,7 +87,3 @@ def readTerms():
 	with open(Words_file, 'r') as f:
 		terms = [x.strip() for x in f.readlines()]
 	return terms
-
-
-if __name__ == "__main__":
-	start(os.path.abspath('..'), './config/config.txt')
