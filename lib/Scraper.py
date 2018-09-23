@@ -105,6 +105,7 @@ def filterQueries(queries):
 				sleep(1)
 			else:
 				logger.error(str(e))
+				conn.close()
 				raise
 		else:
 			break
@@ -149,6 +150,7 @@ def insertURL(urls):
 				sleep(1)
 			else:
 				logger.error(e.message)
+				conn.close()
 				raise
 		else:
 			break
@@ -169,6 +171,7 @@ def insertQuery(query):
 				sleep(1)
 			else:
 				logger.error(str(message))
+				conn.close()
 				raise
 		else:
 			break
