@@ -1,12 +1,8 @@
 [Dirs]
-Download_dir = './downloads'
-Config_dir = './config'
+Download_dir = './downloads/'
+Config_dir = './config/'
 
 [Files]
 DB = 'ScrapeDB.db'
 Word_list = 'words.txt'
-
-[Timeouts]
-DB_timeout = 180
-Download_timeout = 60
-Filter_timeout = 300
+ChromeDriver = 'chromedriver'

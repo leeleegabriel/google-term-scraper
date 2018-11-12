@@ -8,60 +8,97 @@ import argparse
 import sqlite3
 import time
 import logging
-# from tqdm import tqdm
 from time import sleep
 
 import lib.Helper as Helper
-import lib.Scraper as Scraper
-import lib.Downloader as Downloader
-import lib.Filterer as Filterer
+from lib.Scraper import Scraper
+from lib.Downloader import Downloader
+from lib.Filterer import Filterer
 
-version = 'v0.2.0'
+version = 'v0.3.5'
 Config_file = './config/config.txt'
 
 logger = logging.getLogger()
 handler = logging.StreamHandler()
 # loggin.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
-handler.setFormatter(logging.Formatter('%(message)s '))
+handler.setFormatter(logging.Formatter('%(asctime)s : %(message)s'))
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+DB_timeout = 60
+Download_timeout = 60
+Filter_timeout = 600
+
+
+# Maybe make directories static/generated from CBase_dir/DBase_dir
 
 def main():
 	logger.info('Starting GTS %s at %s' % (version, time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.localtime())))
 
 	if Scrape:
-		config = {'Abspath': os.path.abspath('.'), 'DB_file': DB_file, 'Words': Words_File,
-			 'Filetypes': CSearch_dir + '/filetypes.txt', 'Max': Max_Number_of_terms, 'Min': Min_Number_of_terms,
-			 'Results': Number_of_results}
+		scraper = Scraper(logger, DB_file, ChromeDriver_file, Max_Number_of_terms, Min_Number_of_terms, Number_of_results, Filetypes_file, Word_file)
 		try:
-			Scraper.start(config, logger, handler)
+			scraper.start()
 		except KeyboardInterrupt:
 			logger.debug('Detected KeyboardInterrupt')
 
 	if Download:
+		downloader =Downloader(logger, DB_file, Filter_errors, App_dir, Misc_dir)
 		try:
-			config = {'Abspath': os.path.abspath('.'), 'DB_file': DB_file, 'Filter_errors': Filter_errors,
-			 'App_dir': App_dir, 'Misc_dir': Misc_dir}
 			while True:
-				Downloader.start(config, logger, handler)
+				downloader.start()
 				logger.info(' Sleeping %.2fm' % (Download_timeout / 60.0))
 				sleep(Download_timeout)
 		except KeyboardInterrupt:
 			logger.debug('Detected KeyboardInterrupt')
+
 	if Filter:
+		filterer = Filterer(logger, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_File)
 		try:
-			config = {'Abspath': os.path.abspath('.'), 'DB_file': DB_file, 'Hit_dir': Hit_dir,
-			 'Miss_dir': Miss_dir, 'Error_dir': Error_dir, 'App_dir': App_dir, 'Words': Words_File}
-			while True:	
-				Filterer.start(config, logger, handler)
+			while True:
+				filterer.start()
 				logger.info(' Sleeping %.2fm' % (Filter_timeout / 60.0))
 				sleep(Filter_timeout)
 		except KeyboardInterrupt:
 			logger.debug('Detected KeyboardInterrupt')
 
 
-def SetupDB():
+def setupDirs():
+	import configparser
+	config = configparser.ConfigParser()
+	config.read(Config_file)
+
+	global Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, DB_file, Word_file, \
+	 ChromeDriver_file, Filetypes_file
+
+	DBase_dir = config.get('Dirs', 'Download_dir').replace('\'', '')
+	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
+
+	Sample_dir = DBase_dir + 'samples/'
+	Unfiltered_dir = DBase_dir + '/Unfiltered_dir/'
+	App_dir = DBase_dir + 'unfiltered/app/'
+	Misc_dir = DBase_dir + 'unfiltered/misc/'
+	Hit_dir = DBase_dir + 'filtered/hit/'
+	Miss_dir = DBase_dir + 'filtered/miss/'
+	Error_dir = DBase_dir + 'filtered/error/'
+	CSearch_dir = CBase_dir + 'search/'
+
+	dirs = [DBase_dir, CBase_dir, Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir]
+	[Helper.makeFolder(dire) for dire in dirs]
+
+	DB_file = CBase_dir + config.get('Files', 'DB').replace('\'', '')
+	Word_file = CBase_dir + config.get('Files', 'Word_list').replace('\'', '')
+	Filetypes_file = CSearch_dir + 'filetypes.txt'
+	ChromeDriver_file = CBase_dir + config.get('Files', 'ChromeDriver').replace('\'', '')
+
+	files = [Word_file, Filetypes_file, ChromeDriver_file]
+	missing_files = [file for file in files if not Helper.checkFile(file)]
+	if len(missing_files) > 0:
+		logger.error('missing files: %s' % missing_files)
+		sys.exit(0)
+
+
+def setupDB():
 	conn = sqlite3.connect(DB_file)
 	c = conn.cursor()
 	for x in range(0, DB_timeout):
@@ -84,44 +121,9 @@ def SetupDB():
 	conn.close()
 
 
-if __name__ == '__main__':
-	if not os.geteuid() == 0:
-		logger.error('\nscript must be run as r00t!\n')
-		sys.exit(1)
-
-	try:
-		# from googlesearch import search as googlesearch
-		import textract
-		import tika
-	except ImportError as e:
-		logger.error('\nError importing, %s\n' % e.message)
-		sys.exit(1)
-
-	import configparser
-	config = configparser.ConfigParser()
-	config.read(Config_file)
-
-	DBase_dir = config.get('Dirs', 'Download_dir').replace('\'', '')
-	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
-
-	App_dir = DBase_dir + '/unfiltered/app'
-	Misc_dir = DBase_dir + '/unfiltered/misc'
-	Hit_dir = DBase_dir + '/filtered/hit'
-	Miss_dir = DBase_dir + '/filtered/miss'
-	Error_dir = DBase_dir + '/filtered/error'
-	CSearch_dir = CBase_dir + '/search'
-
-	dirs = [DBase_dir, CBase_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir]
-	[Helper.makeFolder(dir) for dir in dirs]
-
-	DB_file = CBase_dir + '/' + config.get('Files', 'DB').replace('\'', '')
-	Word_file = CSearch_dir + '/' + config.get('Files', 'Word_list').replace('\'', '')
-
-	DB_timeout = int(config.get('Timeouts', 'DB_timeout'))
-	Download_timeout = int(config.get('Timeouts', 'Download_timeout'))
-	Filter_timeout = int(config.get('Timeouts', 'Filter_timeout'))
-
-	SetupDB()
+def getArgs():
+	global Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, \
+	 Max_Number_of_terms, Words_File
 
 	parser = argparse.ArgumentParser(description='google-term-scraper', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('-s', '--scrape', default=False, dest='scrape', action='store_true', help='search and collect urls, no downloading of file')
@@ -136,8 +138,8 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 
-	Download = args.download
 	Scrape = args.scrape
+	Download = args.download
 	Filter = args.filter
 	Filter_errors = args.filter_errors
 
@@ -147,16 +149,37 @@ if __name__ == '__main__':
 
 	Words_File = args.word_file
 
-	if Filter_errors:
-		Download = True
+	# if Filter_errors:
+	# 	Download = True
 	if not Scrape and not Download and not Filter:
 		Download, Scrape, Filter = True, True, True
+
 	if Min_Number_of_terms > Max_Number_of_terms:
 		logger.info('Error: Max < Min, setting Max terms to 10 and min terms to 3')
 		Max_Number_of_terms = 10
 		Min_Number_of_terms = 3
+
 	if args.verbose:
 		logger.setLevel(logging.DEBUG)
 
+if __name__ == '__main__':
+	if not os.geteuid() == 0:
+		logger.error('\nscript must be run as r00t!\n')
+		sys.exit(1)
+
+	try:
+		import textract
+		import tika
+		import nltk
+		import sklearn
+	except ImportError as e:
+		logger.error('\nError importing, %s\n' % e.message)
+		sys.exit(1)
+
+	#nltk.download()
+
+	setupDirs()
+	setupDB()
+	getArgs()
 	main()
 	logger.write('\nFinished..')

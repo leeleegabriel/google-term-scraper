@@ -8,16 +8,21 @@ import glob
 
 
 def readFile(file_path):
-	if not os.path.exists(file_path):
-		open(file_path, 'w')
+	# if not os.path.exists(file_path):
+	# 	open(file_path, 'w')
 	with open(file_path, 'r+') as f:
-		file = f.readlines()
-		file = [x.strip() for x in file]
+		file = [x.strip() for x in f.readlines()]
 	return file
 
 
 def moveFile(src, dest):
 	os.rename(src, dest)
+
+
+def checkFile(file):
+	if os.path.isfile(file):
+		return True
+	return False
 
 
 def getFiles(directory):

@@ -14,61 +14,67 @@ from base64 import b64encode
 
 from lib.timeout import timeout
 
-DB_timeout = 600
-
-# TODO: split start into multiple methods
+os.chdir('../')
 
 
-def start(config, log, handler):
-	os.chdir(config['Abspath'])
+class Downloader():
+	def __init__(self, logger, DB_file, Filter_errors, App_dir, Misc_dir):
+		self.logger = logger
+		self.DB = DB_file
+		self.Filter_errors = Filter_errors
+		self.App_dir = App_dir
+		self.Misc_dir =Misc_dir	
+		self.DB_timeout = 600
 
-	global App_dir, Misc_dir, logger
-
-	handler.setFormatter(logging.Formatter('[Download] %(asctime)s : %(message)s '))
-	logger = log
-
-	DB = config['DB_file']
-	Filter_errors = config['Filter_errors']
-	App_dir = config['App_dir']
-	Misc_dir = config['Misc_dir']
-
-	conn = sqlite3.connect(DB)
-	c = conn.cursor()
-
-	logger.info('Getting URLs from DB')
-	for x in range(0, DB_timeout):
-		try:
-			if Filter_errors:
-				c.execute("""SELECT url FROM URLs WHERE url NOT IN(SELECT url FROM Used_URLs) AND url NOT IN(SELECT url FROM Download_Errors)""")
-			else:
-				c.execute("""SELECT url FROM URLs WHERE url NOT IN(SELECT url FROM Used_URLs)""")
-			Downloads = [line[0] for line in c.fetchall()]
-		except sqlite3.OperationalError as e:
-			if "locked" in str(e):
-				sleep(1)
-			else:
-				raise
+	def start(self):
+		Downloads = self.filterDownloads(self.self.DB, self.Filter_errors)
+		if Downloads:
+			self.getFiles(Downloads, self.DB)
 		else:
-			break
-	conn.close()
+			self.logger.info('No new URLs found')
 
-	if Downloads:
-		logger.info('Attempting to Download Files from %s URLs' % len(Downloads))
+	def filterDownloads(self):
+		self.logger.info('Getting URLs from self.DB')
+		conn = sqlite3.connect(self.DB)
+		c = conn.cursor()
+
+		Downloads = []
+		for x in range(0, self.DB_timeout):
+			try:
+				if self.Filter_errors:
+					c.execute("""SELECT url FROM URLs WHERE url NOT IN(SELECT url FROM Used_URLs) AND url NOT IN(SELECT url FROM Download_Errors)""")
+				else:
+					c.execute("""SELECT url FROM URLs WHERE url NOT IN(SELECT url FROM Used_URLs)""")
+				Downloads = [line[0] for line in c.fetchall()]
+			except sqlite3.OperationalError as e:
+				if "locked" in str(e):
+					sleep(1)
+				else:
+					self.logger.error(str(e))
+					conn.close()
+					raise
+			else:
+				break
+		conn.close()
+		return Downloads
+
+	def getFiles(self, Downloads):
+		self.logger.info('Attempting to Download Files from %s URLs' % len(Downloads))
 		for url in Downloads:
 			try:
-				if not os.path.isfile(App_dir + '/' + b64encode(url)) and not os.path.isfile(Misc_dir + '/' + b64encode(url)):
-					logger.debug('Downloading %s', url)
-					getDownload(DB, url)
+				if not os.path.isfile(self.App_dir + b64encode(url)) and not os.path.isfile(self.Misc_dir  + b64encode(url)):
+					self.logger.debug('Downloading %s', url)
+					self.downloadFile(self.DB, url)
 				else:
-					logger.debug('Already downloaded %s', url)
+					self.logger.debug('Already downloaded %s', url)
 			except KeyboardInterrupt:
-				logger.debug('Detected KeyboardInterrupt')
+				self.logger.debug('Detected KeyboardInterrupt')
 				raise
 			except Exception as error:
-				logger.debug('Logging download error: %s', url)
-				conn = sqlite3.connect(DB)
+				self.logger.debug('Logging download error: %s', url)
+				conn = sqlite3.connect(self.DB)
 				c = conn.cursor()
-				for x in range(0, DB_timeout):
+				for x in range(0, self.DB_timeout):
 					try:
 						c.execute("""INSERT OR REPLACE INTO Download_Errors (url, Error) VALUES (?, ?)""", (url, str(error)))
 						conn.commit()
@@ -76,40 +82,40 @@ def start(config, log, handler):
 						if "locked" in str(e):
 							sleep(1)
 						else:
-							logger.error(str(e))
+							self.logger.error(str(e))
+							conn.close()
 							raise
 					else:
 						break
 				conn.close()
-		logger.info('Finished downloading files')
-	else:
-		logger.info('No new URLs found')
+		self.logger.info('Finished downloading files')
 
-
-@timeout(10, os.strerror(errno.ETIMEDOUT))
-def getDownload(DB, url):
-	data = urlopen(url)
-	write = data.read()
-	if 'application' in data.info().getheader('Content-Type'):
-		folder = App_dir + '/'
-	else:
-		folder = Misc_dir + '/'
-	logger.debug('Saving %s to %s', url, folder)
-	with open(folder + b64encode(url), 'wb') as f:
-		f.write(write)
-
-	conn = sqlite3.connect(DB)
-	c = conn.cursor()
-	for x in range(0, DB_timeout):
-		try:
-			c.execute("""INSERT OR REPLACE INTO Used_URLs(url) VALUES (?)""", (url,))
-			conn.commit()
-		except sqlite3.OperationalError as e:
-			if "locked" in str(e):
-				sleep(1)
-			else:
-				logger.error(e.message)
-				raise
+	@timeout(10, os.strerror(errno.ETIMEDOUT))
+	def downloadFile(self, url):
+		data = urlopen(url)
+		write = data.read()
+		if 'application' in data.info().getheader('Content-Type'):
+			folder = self.App_dir
 		else:
-			break
-	conn.close()
+			folder = self.Misc_dir
+
+		self.logger.debug('Saving %s to %s', url, folder)
+		with open(folder + b64encode(url), 'wb') as f:
+			f.write(write)
+
+		conn = sqlite3.connect(self.DB)
+		c = conn.cursor()
+		for x in range(0, self.DB_timeout):
+			try:
+				c.execute("""INSERT OR REPLACE INTO Used_URLs(url) VALUES (?)""", (url,))
+				conn.commit()
+			except sqlite3.OperationalError as e:
+				if "locked" in str(e):
+					sleep(1)
+				else:
+					self.logger.error(str(e))
+					conn.close()
+					raise
+			else:
+				break
+		conn.close()

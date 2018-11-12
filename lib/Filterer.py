@@ -4,86 +4,127 @@
 import string
 import os
 import logging
+import pickle
 from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem.porter import PorterStemmer
+
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
 import lib.Helper as Helper
 
-SA_count = 32
+os.chdir('../')
 
 
-def start(config, log, handler):
-	os.chdir(config['Abspath'])
+class Filterer():
+	def __init__(self, logger, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_file):
+		self.self.logger. = self.logger.
+		self.Sample_dir = Sample_dir
+		self.Hit_dir = Hit_dir
+		self.Miss_dir = Miss_dir
+		self.Error_dir = Error_dir
+		self.Unfiltered_dir = Unfiltered_dir
+		self.Words_file = Words_file
+		self.aThreshhold = 0.70
+		self.sThreshhold = 144
 
-	global Hit_dir, Miss_dir, Words_file, logger
+	def start(self):
+		Files = Helper.getFiles(self.Unfiltered_dir + '/*')
+		self.logger.info('Sorting files')
+		if Files:
+			if not os.listdir(Sample_dir):
+				self.logger.info("Sample Folder empty, doing simple filtering")
+				self.simpleAnalysis(Files, Helper.getText(Words_file))
+			else:
+				self.complexAnalysis(Files)
+			self.logger.info('Finished filtering files')
+		else:
+			self.logger.info('No files to filter')
 
-	handler.setFormatter(logging.Formatter('[Filter] %(asctime)s : %(message)s '))
-	logger = log
+	def complexAnalysis(self, files):
+		if os.path.isfile('./config/text_classifier'):
+			model = self.loadDataset()
+		else:
+			model = self.getDataset('./config/dataset')
 
-	Hit_dir = config['Hit_dir']
-	Miss_dir = config['Miss_dir']
-	Error_dir = config['Error_dir']
-	Unfiltered_dir = config['App_dir']
-
-	Words_file = config['Words']
-
-	Files = Helper.getFiles(Unfiltered_dir + '/*')
-	logger.info('Sorting files')
-	if Files:
-		for file in Files:
+		for file in files:
 			try:
-				text = cleanText(getText(file))
-				dest = simple_analysis(file, text)
+				text = self.cleanText(self.getText(file))
+				if model.predict(text) > aThreshhold:
+					dest = Hit_dir + file.split('/')[-1]
+				else:
+					dest = Miss_dir + file.split('/')[-1]
 				Helper.moveFile(file, dest)
-			except KeyboardInterrupt:
-				logger.debug('Detected KeyboardInterrupt')
-				raise
 			except Helper.ParseError:
-				logger.error('Encountered Parse Error with %s', file)
-				Helper.moveFile(file, Error_dir + '/' + file.split('/')[:-1])
-		logger.info('Finished filtering filtes')
-	else:
-		logger.info('No files to filter')
+				self.logger.error('Encountered Parse Error with %s', file)
+				dest = Error_dir + file.split('/')[:-1]
+			Helper.moveFile(file, dest)
 
+	def simpleAnalysis(self, files, keywords):
+		for file in files:
+			try:
+				text = self.getText(file)
+				count = 0
+				[count + 1 for word in text if text in keywords]
+				if count > sThreshhold:
+					dest = Hit_dir + file.split('/')[-1]
+				else:
+					dest = Miss_dir + file.split('/')[-1]
+			except Helper.ParseError:
+				self.logger.error('Encountered Parse Error with %s', file)
+				dest = Error_dir + file.split('/')[:-1]
+			Helper.moveFile(file, dest)
 
-def getText(file, lib):
-	try:
-		import textract
-		text = textract.process(file)
-	except KeyboardInterrupt:
-		logger.debug('Detected KeyboardInterrupt')
-		raise
-	except Exception:
+	def getText(self, file):
 		try:
-			from tika import parser
-			text = parser.from_file(file)['content']
-		except KeyboardInterrupt:
-			logger.debug('Detected KeyboardInterrupt')
-			raise
+			import textract
+			text = textract.process(file)
 		except Exception:
-			raise Helper.ParseError('Whoops')
+			try:
+				from tika import parser
+				text = parser.from_file(file)['content']
+			except Exception:
+				raise Helper.ParseError('Whoops')
+		return text
 
-	return text
+	def cleanText(self, text):
+		filtered = word_tokenize(text)#split strings into words
+		filtered = [word for word in filtered if word.isalpha()]#removes all tokens that are not alphabetic
 
+		stop = stopwords.words('english')
+		filtered = [word for word in filtered if word not in stop]#removes stop words
 
-def cleanText(text):
-	stop = stopwords.words('english')
-	filtered = str(text).lower().replace('[^\w\s]', '').replace('\n', ' ')
-	filtered = ''.join(x for x in filtered if x in string.printable)
-	filtered = ' '.join(word for word in filtered.split() if word not in stop)
-	# count = Counter(filtered).most_common(10)
-	return filtered
+		port = PorterStemmer()
+		filtered = [port.stem(word) for word in filtered]
 
+		return filtered
 
-def simple_analysis(file, text):
-	terms = [t.replace('*', '').lower() for t in Helper.readFile(Words_file)]
-	if sum(text.count(term) for term in terms) > SA_count:
-		dest = Hit_dir + '/' + file.split('/')[-1]
-	else:
-		dest = Miss_dir + '/' + file.split('/')[-1]
-	return dest
+	def loadDataset(self):
+		with open('./config/text_classifier', 'rb') as p:
+			model = pickle.load(p)
+			return model
 
+	def getDataset(self):
+		files = [dire + '/' + file for file in os.listdir(dire)]
+		text = [cleanText(getText(files)) for file in files]
 
-def readTerms():
-	with open(Words_file, 'r') as f:
-		terms = [x.strip() for x in f.readlines()]
-	return terms
+		vectorizer = CountVectorizer(max_features=1500, min_df=5, max_df=0.7, stop_words=stopwords.words('english'))
+		x = vectorizer.fit_transform(text).toarray()
+
+		tfidfconverter = TfidfTransformer()
+		x = tfidfconverter.fit_transform(x).toarray()
+
+		x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0)
+
+		classifier = RandomForestClassifier(n_estimators=1000, random_state=0) 
+		classifier.fit(x_train, y_train)
+
+		y_pred = classifier.predict(x_test)
+
+		with open('./config/text_classifier', 'wb') as p:
+			pickle.dump(classifier,p)
+
+		return classifier
