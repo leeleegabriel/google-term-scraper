@@ -48,7 +48,7 @@ class Scraper():
 		self.logger.info('\tLooking for: %s' % (" ".join(str(x) for x in FileTypes)))
 		BaseQuery = str(" ".join(str(x) for x in Primary_words))
 		Queries = self.filterQueries(self.generateQueries(BaseQuery, Secondary_words))
-		self.Scrape(Queries, Filetypes_file)
+		self.Scrape(Queries, FileTypes)
 
 	def getWords(self):
 		Primary_words = []
@@ -86,11 +86,9 @@ class Scraper():
 		for x in range(0, self.DB_timeout):
 			try:
 				c.execute("""create table Queries (query text PRIMARY KEY)""")
-				stmt = """INSERT INTO %s (%s) VALUES (?)""" % ('Queries', 'query')
-				[c.execute(stmt, (row,)) for row in queries]
-				stmt = """SELECT query FROM Queries WHERE query NOT IN (SELECT query FROM Used_Queries)"""
+				c.executemany("""INSERT INTO Queries (query) VALUES (?)""", queries)
 				conn.row_factory = lambda cursor, row: row[0]
-				filtered_queries = c.execute(stmt).fetchall()
+				filtered_queries = c.execute("""SELECT query FROM Queries WHERE query NOT IN (SELECT query FROM Used_Queries)""").fetchall()
 				break
 			except sqlite3.OperationalError as e:
 				if "locked" in str(e):
@@ -110,16 +108,14 @@ class Scraper():
 			chrome_options = Options()
 			chrome_options.add_argument('--headless')
 			chrome_options.add_argument('--window-size=1920x1080')
-			driver = webdriver.Chrome(executable_path=os.path.absolute(ChromeDriver_file), chrome_options=chrome_options)
+			driver = webdriver.Chrome(executable_path=os.path.absolute(self.ChromeDriver_file), chrome_options=chrome_options)
 			driver.implicitly_wait(30)
 			for query in queries:
 				urls = [] + list(self.googleSearch(driver, query))
-				[urls.append(self.googleSearch(driver,'filtetype:' + file + ' ' + query)) for file in filetypes]
+				[urls.append(self.googleSearch(driver,'filtetype:' + f + ' ' + query)) for f in filetypes]
 				if urls:
-					self.insertQuery("""INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('URLs', 'url'), urls)
-					self.insertQuery("""INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('Used_Queries', 'query'), [query])
-					#insertNewURL(urls)
-					#insertUsedQuery(query)
+					self.insertURLs(urls)
+					self.insertUsedQuery(query)
 				else:
 					self.logger.debug('Found no urls with %s', query)
 			driver.close()
@@ -140,63 +136,38 @@ class Scraper():
 		sleep(self.Browser_delay)
 		return url_list
 
-
-# def insertNewURL(urls):
-# 	conn = sqlite3.connect(DB)
-# 	c = conn.cursor()
-
-# 	stmt = """INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('URLs', 'url')
-# 	for x in range(0, DB_timeout):
-# 		try:
-# 			[c.execute(stmt, (row,)) for row in urls]
-# 			conn.commit()
-# 		except sqlite3.OperationalError as e:
-# 			if "locked" in str(e):
-# 				sleep(1)
-# 			else:
-# 				self.logger.error(e.message)
-# 				conn.close()
-# 				raise
-# 		else:
-# 			break
-# 	conn.close()
-
-
-# def insertUsedQuery(query):
-# 	conn = sqlite3.connect(DB)
-# 	c = conn.cursor()
-
-# 	stmt = """INSERT OR IGNORE INTO %s (%s) VALUES (?)""" % ('Used_Queries', 'query')
-# 	for x in range(0, DB_timeout):
-# 		try:
-# 			c.execute(stmt, (query,))
-# 			conn.commit()
-# 		except sqlite3.OperationalError as e:
-# 			if "locked" in str(e):
-# 				sleep(1)
-# 			else:
-# 				self.logger.error(str(e.message))
-# 				conn.close()
-# 				raise
-# 		else:
-# 			break
-# 	conn.close()
-
-
-def insertQuery(selt, stmt, queries):
-	conn = sqlite3.connect(self.DB)
-	c = conn.cursor()
-	for x in range(0, DB_timeout):
-		try:
-			[c.execute(stmt, (row,)) for row in queries]
-			conn.commit()
-		except sqlite3.OperationalError as e:
-			if "locked" in str(e):
-				sleep(1)
+	def insertURLs(self, queries):
+		conn = sqlite3.connect(self.DB)
+		c = conn.cursor()
+		for x in range(0, self.DB_timeout):
+			try:
+				c.executemany("""INSERT OR IGNORE INTO URLs (url) VALUES (?)""", queries)
+				conn.commit()
+			except sqlite3.OperationalError as e:
+				if "locked" in str(e):
+					sleep(1)
+				else:
+					self.logger.error(str(e.message))
+					conn.close()
+					raise
 			else:
-				self.logger.error(str(e.message))
-				conn.close()
-				raise
-		else:
-			break
-	conn.close()
+				break
+		conn.close()
+
+	def insertUsedQuery(self, query):
+		conn = sqlite3.connect(self.DB)
+		c = conn.cursor()
+		for x in range(0, self.DB_timeout):
+			try:
+				c.execute("""INSERT OR IGNORE INTO Used_Queries (query) VALUES (?)""", query)
+				conn.commit()
+			except sqlite3.OperationalError as e:
+				if "locked" in str(e):
+					sleep(1)
+				else:
+					self.logger.error(str(e.message))
+					conn.close()
+					raise
+			else:
+				break
+		conn.close()

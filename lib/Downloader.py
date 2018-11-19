@@ -7,6 +7,7 @@ import os.path
 import errno
 import sqlite3
 import logging
+import urllib
 from time import sleep
 from urllib.request import urlopen
 # from tqdm import tqdm
@@ -92,30 +93,31 @@ class Downloader():
 
 	@timeout(10, os.strerror(errno.ETIMEDOUT))
 	def downloadFile(self, url):
-		data = urlopen(url)
-		write = data.read()
-		if 'application' in data.info().getheader('Content-Type'):
-			folder = self.App_dir
+		if url.lower().startswith('http'):
+			req = urllib.Request.request(url)
 		else:
-			folder = self.Misc_dir
-
-		self.logger.debug('Saving %s to %s', url, folder)
-		with open(folder + b64encode(url), 'wb') as f:
-			f.write(write)
-
-		conn = sqlite3.connect(self.DB)
-		c = conn.cursor()
-		for x in range(0, self.DB_timeout):
-			try:
-				c.execute("""INSERT OR REPLACE INTO Used_URLs(url) VALUES (?)""", (url,))
-				conn.commit()
-			except sqlite3.OperationalError as e:
-				if "locked" in str(e):
-					sleep(1)
-				else:
-					self.logger.error(str(e))
-					conn.close()
-					raise
+			raise ValueError from None
+		with urlopen(req) as resp:
+			if 'application' in resp.info().getheader('Content-Type'):
+				folder = self.App_dir
 			else:
-				break
-		conn.close()
+				folder = self.Misc_dir
+			self.logger.debug('Saving %s to %s', url, folder)
+			with open(folder + b64encode(url), 'wb') as f:
+				f.write(resp)
+			conn = sqlite3.connect(self.DB)
+			c = conn.cursor()
+			for x in range(0, self.DB_timeout):
+				try:
+					c.execute("""INSERT OR REPLACE INTO Used_URLs(url) VALUES (?)""", (url,))
+					conn.commit()
+				except sqlite3.OperationalError as e:
+					if "locked" in str(e):
+						sleep(1)
+					else:
+						self.logger.error(str(e))
+						conn.close()
+						raise
+				else:
+					break
+			conn.close()

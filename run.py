@@ -34,9 +34,12 @@ Filter_timeout = 600
 
 def main():
 	logger.info('Starting GTS %s at %s' % (version, time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.localtime())))
+	Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir, DB_file, Words_file, Filetypes_file, ChromeDriver_file = setupDirs()
+	Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, Max_Number_of_terms = getArgs(Words_file)
+	setupDB(DB_file)
 
 	if Scrape:
-		scraper = Scraper(logger, DB_file, ChromeDriver_file, Max_Number_of_terms, Min_Number_of_terms, Number_of_results, Filetypes_file, Word_file)
+		scraper = Scraper(logger, DB_file, ChromeDriver_file, Max_Number_of_terms, Min_Number_of_terms, Number_of_results, Filetypes_file, Words_file)
 		try:
 			scraper.start()
 		except KeyboardInterrupt:
@@ -53,7 +56,7 @@ def main():
 			logger.debug('Detected KeyboardInterrupt')
 
 	if Filter:
-		filterer = Filterer(logger, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_File)
+		filterer = Filterer(logger, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_file)
 		try:
 			while True:
 				filterer.start()
@@ -67,9 +70,6 @@ def setupDirs():
 	import configparser
 	config = configparser.ConfigParser()
 	config.read(Config_file)
-
-	global Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, DB_file, Word_file, \
-	 ChromeDriver_file, Filetypes_file
 
 	DBase_dir = config.get('Dirs', 'Download_dir').replace('\'', '')
 	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
@@ -87,18 +87,20 @@ def setupDirs():
 	[Helper.makeFolder(dire) for dire in dirs]
 
 	DB_file = CBase_dir + config.get('Files', 'DB').replace('\'', '')
-	Word_file = CBase_dir + config.get('Files', 'Word_list').replace('\'', '')
+	Words_file = CBase_dir + config.get('Files', 'Word_list').replace('\'', '')
 	Filetypes_file = CSearch_dir + 'filetypes.txt'
 	ChromeDriver_file = CBase_dir + config.get('Files', 'ChromeDriver').replace('\'', '')
 
-	files = [Word_file, Filetypes_file, ChromeDriver_file]
-	missing_files = [file for file in files if not Helper.checkFile(file)]
-	if len(missing_files) > 0:
+	files = [Words_file, Filetypes_file, ChromeDriver_file]
+	missing_files = [f for f in files if not Helper.checkFile(f)]
+	if missing_files:
 		logger.error('missing files: %s' % missing_files)
 		sys.exit(0)
 
+	return Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir, DB_file, Words_file, Filetypes_file, ChromeDriver_file
 
-def setupDB():
+
+def setupDB(DB_file):
 	conn = sqlite3.connect(DB_file)
 	c = conn.cursor()
 	for x in range(0, DB_timeout):
@@ -121,10 +123,7 @@ def setupDB():
 	conn.close()
 
 
-def getArgs():
-	global Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, \
-	 Max_Number_of_terms, Words_File
-
+def getArgs(Words_file):
 	parser = argparse.ArgumentParser(description='google-term-scraper', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('-s', '--scrape', default=False, dest='scrape', action='store_true', help='search and collect urls, no downloading of file')
 	parser.add_argument('-d', '--download', default=False, dest='download', action='store_true', help='download from saved url list, no searching')
@@ -134,7 +133,7 @@ def getArgs():
 	parser.add_argument('-v', '--verbose', default=False, action='store_true', help='Gives Verbose/Debug info in cmd')
 	parser.add_argument('-Ma', '--max_terms', default=10, help='max number of secondary search terms per google search')
 	parser.add_argument('-Mi', '--min_terms', default=3, help='min number of secondary search terms per google search')
-	parser.add_argument('-w', '--word_file', default=Word_file, help='word list name in config/search/ for generating queries')
+	parser.add_argument('-w', '--word_file', default=Words_file, help='word list name in config/search/ for generating queries')
 
 	args = parser.parse_args()
 
@@ -161,6 +160,8 @@ def getArgs():
 
 	if args.verbose:
 		logger.setLevel(logging.DEBUG)
+
+	return Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, Max_Number_of_terms, Words_file
 
 if __name__ == '__main__':
 	if not os.geteuid() == 0:
