@@ -1,8 +1,0 @@
-[Dirs]
-Download_dir = './downloads/'
-Config_dir = './config/'
-
-[Files]
-DB = 'ScrapeDB.db'
-Word_list = 'words.txt'
-ChromeDriver = 'chromedriver'

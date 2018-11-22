@@ -21,7 +21,7 @@ os.chdir('../')
 
 class Filterer():
 	def __init__(self, logger, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_file):
-		self.self.logger. = self.logger.
+		self.self.logger = self.logger
 		self.Sample_dir = Sample_dir
 		self.Hit_dir = Hit_dir
 		self.Miss_dir = Miss_dir
@@ -35,9 +35,9 @@ class Filterer():
 		Files = Helper.getFiles(self.Unfiltered_dir + '/*')
 		self.logger.info('Sorting files')
 		if Files:
-			if not os.listdir(Sample_dir):
+			if not os.listdir(self.Sample_dir):
 				self.logger.info("Sample Folder empty, doing simple filtering")
-				self.simpleAnalysis(Files, Helper.getText(Words_file))
+				self.simpleAnalysis(Files, Helper.getText(self.Words_file))
 			else:
 				self.complexAnalysis(Files)
 			self.logger.info('Finished filtering files')
@@ -53,14 +53,14 @@ class Filterer():
 		for file in files:
 			try:
 				text = self.cleanText(self.getText(file))
-				if model.predict(text) > aThreshhold:
-					dest = Hit_dir + file.split('/')[-1]
+				if model.predict(text) > self.aThreshhold:
+					dest = self.fHit_dir + file.split('/')[-1]
 				else:
-					dest = Miss_dir + file.split('/')[-1]
+					dest = self.Miss_dir + file.split('/')[-1]
 				Helper.moveFile(file, dest)
 			except Helper.ParseError:
 				self.logger.error('Encountered Parse Error with %s', file)
-				dest = Error_dir + file.split('/')[:-1]
+				dest = self.Error_dir + file.split('/')[:-1]
 			Helper.moveFile(file, dest)
 
 	def simpleAnalysis(self, files, keywords):
@@ -69,13 +69,13 @@ class Filterer():
 				text = self.getText(file)
 				count = 0
 				[count + 1 for word in text if text in keywords]
-				if count > sThreshhold:
-					dest = Hit_dir + file.split('/')[-1]
+				if count > self.sThreshhold:
+					dest = self.Hit_dir + file.split('/')[-1]
 				else:
-					dest = Miss_dir + file.split('/')[-1]
+					dest = self.Miss_dir + file.split('/')[-1]
 			except Helper.ParseError:
 				self.logger.error('Encountered Parse Error with %s', file)
-				dest = Error_dir + file.split('/')[:-1]
+				dest = self.Error_dir + file.split('/')[:-1]
 			Helper.moveFile(file, dest)
 
 	def getText(self, file):
@@ -108,14 +108,14 @@ class Filterer():
 			return model
 
 	def getDataset(self):
-		files = [dire + '/' + file for file in os.listdir(dire)]
-		text = [cleanText(getText(files)) for file in files]
+		files = [self.Sample_dir + '/' + file for file in os.listdir(self.Sample_dir)]
+		text = [self.cleanText(self.getText(files)) for file in files]
 
 		vectorizer = CountVectorizer(max_features=1500, min_df=5, max_df=0.7, stop_words=stopwords.words('english'))
 		x = vectorizer.fit_transform(text).toarray()
 
 		tfidfconverter = TfidfTransformer()
-		x = tfidfconverter.fit_transform(x).toarray()
+		y = tfidfconverter.fit_transform(x).toarray() ## x or y?
 
 		x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0)
 

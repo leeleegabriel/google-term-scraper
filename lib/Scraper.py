@@ -112,7 +112,7 @@ class Scraper():
 			driver.implicitly_wait(30)
 			for query in queries:
 				urls = [] + list(self.googleSearch(driver, query))
-				[urls.append(self.googleSearch(driver,'filtetype:' + f + ' ' + query)) for f in filetypes]
+				urls = [self.googleSearch(driver,'filtetype:' + f + ' ' + query) for f in filetypes]
 				if urls:
 					self.insertURLs(urls)
 					self.insertUsedQuery(query)

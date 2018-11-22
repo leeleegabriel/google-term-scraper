@@ -7,4 +7,3 @@ lib/__pycache__/*
 *.sublime-project
 *.cfg
 test.py
-!config.txt

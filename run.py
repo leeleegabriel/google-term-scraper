@@ -8,6 +8,7 @@ import argparse
 import sqlite3
 import time
 import logging
+import configparser
 from time import sleep
 
 import lib.Helper as Helper
@@ -16,7 +17,7 @@ from lib.Downloader import Downloader
 from lib.Filterer import Filterer
 
 version = 'v0.3.5'
-Config_file = './config/config.txt'
+Config_file = 'config.txt'
 
 logger = logging.getLogger()
 handler = logging.StreamHandler()
@@ -35,7 +36,7 @@ Filter_timeout = 600
 def main():
 	logger.info('Starting GTS %s at %s' % (version, time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.localtime())))
 	Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir, DB_file, Words_file, Filetypes_file, ChromeDriver_file = setupDirs()
-	Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, Max_Number_of_terms = getArgs(Words_file)
+	Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, Max_Number_of_terms, Words_file = getArgs(Words_file)
 	setupDB(DB_file)
 
 	if Scrape:
@@ -67,9 +68,10 @@ def main():
 
 
 def setupDirs():
-	import configparser
+	print(Config_file)
 	config = configparser.ConfigParser()
 	config.read(Config_file)
+	print(config.sections())
 
 	DBase_dir = config.get('Dirs', 'Download_dir').replace('\'', '')
 	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
@@ -84,7 +86,8 @@ def setupDirs():
 	CSearch_dir = CBase_dir + 'search/'
 
 	dirs = [DBase_dir, CBase_dir, Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir]
-	[Helper.makeFolder(dire) for dire in dirs]
+	for dire in dirs:
+		Helper.makeFolder(dire) 
 
 	DB_file = CBase_dir + config.get('Files', 'DB').replace('\'', '')
 	Words_file = CBase_dir + config.get('Files', 'Word_list').replace('\'', '')
@@ -98,29 +101,6 @@ def setupDirs():
 		sys.exit(0)
 
 	return Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir, DB_file, Words_file, Filetypes_file, ChromeDriver_file
-
-
-def setupDB(DB_file):
-	conn = sqlite3.connect(DB_file)
-	c = conn.cursor()
-	for x in range(0, DB_timeout):
-		try:
-			c.execute("""drop table if exists Queries""")
-			c.execute("""create table if not exists Used_Queries (query text PRIMARY KEY)""")
-			c.execute("""create table if not exists Used_URLs (url text PRIMARY KEY)""")
-			c.execute("""create table if not exists Download_Errors(url text PRIMARY KEY, Error text)""")
-			c.execute("""create table if not exists URLs (url text)""")
-			conn.commit()
-		except sqlite3.OperationalError as e:
-			logger.info(str(e))
-			if "locked" in str(e):
-				sleep(1)
-			else:
-				logger.error(e.message)
-				raise
-		else:
-			break
-	conn.close()
 
 
 def getArgs(Words_file):
@@ -163,6 +143,29 @@ def getArgs(Words_file):
 
 	return Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, Max_Number_of_terms, Words_file
 
+
+def setupDB(DB_file):
+	conn = sqlite3.connect(DB_file)
+	c = conn.cursor()
+	for x in range(0, DB_timeout):
+		try:
+			c.execute("""drop table if exists Queries""")
+			c.execute("""create table if not exists Used_Queries (query text PRIMARY KEY)""")
+			c.execute("""create table if not exists Used_URLs (url text PRIMARY KEY)""")
+			c.execute("""create table if not exists Download_Errors(url text PRIMARY KEY, Error text)""")
+			c.execute("""create table if not exists URLs (url text)""")
+			conn.commit()
+		except sqlite3.OperationalError as e:
+			logger.info(str(e))
+			if "locked" in str(e):
+				sleep(1)
+			else:
+				logger.error(e.message)
+				raise
+		else:
+			break
+	conn.close()
+
 if __name__ == '__main__':
 	if not os.geteuid() == 0:
 		logger.error('\nscript must be run as r00t!\n')
@@ -176,11 +179,6 @@ if __name__ == '__main__':
 	except ImportError as e:
 		logger.error('\nError importing, %s\n' % e.message)
 		sys.exit(1)
-
 	#nltk.download()
-
-	setupDirs()
-	setupDB()
-	getArgs()
 	main()
 	logger.write('\nFinished..')
