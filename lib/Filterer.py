@@ -45,47 +45,49 @@ class Filterer():
 			self.logger.info('No files to filter')
 
 	def complexAnalysis(self, files):
-		if os.path.isfile('./config/text_classifier'):
-			model = self.loadDataset()
-		else:
-			model = self.getDataset('./config/dataset')
+		# if os.path.isfile('./config/text_classifier'):
+		# 	model = self.loadDataset()
+		# else:
+		model = self.getDataset('./config/dataset')
 
-		for file in files:
+		for f in files:
 			try:
-				text = self.cleanText(self.getText(file))
+				text = self.cleanText(self.getText(f))
 				if model.predict(text) > self.aThreshhold:
-					dest = self.fHit_dir + file.split('/')[-1]
+					dest = self.fHit_dir + f.split('/')[-1]
 				else:
-					dest = self.Miss_dir + file.split('/')[-1]
-				Helper.moveFile(file, dest)
+					dest = self.Miss_dir + f.split('/')[-1]
+				Helper.moveFile(f, dest)
 			except Helper.ParseError:
-				self.logger.error('Encountered Parse Error with %s', file)
-				dest = self.Error_dir + file.split('/')[:-1]
-			Helper.moveFile(file, dest)
+				self.logger.error('Encountered Parse Error with %s', f)
+				dest = self.Error_dir + f.split('/')[:-1]
+			Helper.moveFile(f, dest)
 
 	def simpleAnalysis(self, files, keywords):
-		for file in files:
+		for f in files:
 			try:
-				text = self.getText(file)
+				text = self.getText(f)
 				count = 0
-				[count + 1 for word in text if text in keywords]
+				for word in text:
+					if text in keywords:
+						count += 1
 				if count > self.sThreshhold:
-					dest = self.Hit_dir + file.split('/')[-1]
+					dest = self.Hit_dir + f.split('/')[-1]
 				else:
-					dest = self.Miss_dir + file.split('/')[-1]
+					dest = self.Miss_dir + f.split('/')[-1]
 			except Helper.ParseError:
-				self.logger.error('Encountered Parse Error with %s', file)
-				dest = self.Error_dir + file.split('/')[:-1]
-			Helper.moveFile(file, dest)
+				self.logger.error('Encountered Parse Error with %s', f)
+				dest = self.Error_dir + f.split('/')[:-1]
+			Helper.moveFile(f, dest)
 
-	def getText(self, file):
+	def getText(self, f):
 		try:
 			import textract
-			text = textract.process(file)
+			text = textract.process(f)
 		except Exception:
 			try:
 				from tika import parser
-				text = parser.from_file(file)['content']
+				text = parser.from_file(f)['content']
 			except Exception:
 				raise Helper.ParseError('Whoops')
 		return text
@@ -102,10 +104,10 @@ class Filterer():
 
 		return filtered
 
-	def loadDataset(self):
-		with open('./config/text_classifier', 'rb') as p:
-			model = pickle.load(p)
-			return model
+	# def loadDataset(self):
+	# 	with open('./config/text_classifier', 'rb') as p:
+	# 		model = pickle.load(p)
+	# 		return model
 
 	def getDataset(self):
 		files = [self.Sample_dir + '/' + file for file in os.listdir(self.Sample_dir)]
@@ -124,7 +126,7 @@ class Filterer():
 
 		y_pred = classifier.predict(x_test)
 
-		with open('./config/text_classifier', 'wb') as p:
-			pickle.dump(classifier,p)
+		# with open('./config/text_classifier', 'wb') as p:
+		# 	pickle.dump(classifier,p)
 
 		return classifier
