@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
 
@@ -6,7 +6,7 @@ import os
 import os.path
 import errno
 import sqlite3
-import logging
+import sys
 import urllib
 from time import sleep
 from urllib.request import urlopen
@@ -15,7 +15,7 @@ from base64 import b64encode
 
 from lib.timeout import timeout
 
-os.chdir('../')
+sys.path.append('../')
 
 
 class Downloader():
@@ -24,13 +24,16 @@ class Downloader():
 		self.DB = DB_file
 		self.Filter_errors = Filter_errors
 		self.App_dir = App_dir
-		self.Misc_dir =Misc_dir	
-		self.DB_timeout = 600
+		self.Misc_dir =Misc_dir
+		self.running = True
+		self.fin = False
+		self.DB_timeout = 30
+		self.run_cap = 30
 
-	def start(self):
-		Downloads = self.filterDownloads(self.self.DB, self.Filter_errors)
+	def run(self, loop):
+		Downloads = self.filterDownloads()
 		if Downloads:
-			self.getFiles(Downloads, self.DB)
+			self.getFiles(Downloads)
 		else:
 			self.logger.info('No new URLs found')
 
@@ -61,6 +64,8 @@ class Downloader():
 
 	def getFiles(self, Downloads):
 		self.logger.info('Attempting to Download Files from %s URLs' % len(Downloads))
+		urls = []
+		run_count = 0
 		for url in Downloads:
 			try:
 				if not os.path.isfile(self.App_dir + b64encode(url)) and not os.path.isfile(self.Misc_dir  + b64encode(url)):
@@ -68,9 +73,12 @@ class Downloader():
 					self.downloadFile(self.DB, url)
 				else:
 					self.logger.debug('Already downloaded %s', url)
-			except KeyboardInterrupt:
-				self.logger.debug('Detected KeyboardInterrupt')
-				raise
+				urls.append(url)
+				run_count = 0
+				if run_count > self.run_cap:
+					self.insertUsed_Urls(urls)
+					urls = []
+					run_count = 0
 			except Exception as error:
 				self.logger.debug('Logging download error: %s', url)
 				conn = sqlite3.connect(self.DB)
@@ -89,6 +97,7 @@ class Downloader():
 					else:
 						break
 				conn.close()
+		self.insertUsed_Urls(urls)
 		self.logger.info('Finished downloading files')
 
 	@timeout(10, os.strerror(errno.ETIMEDOUT))
@@ -105,19 +114,21 @@ class Downloader():
 			self.logger.debug('Saving %s to %s', url, folder)
 			with open(folder + b64encode(url), 'wb') as f:
 				f.write(resp)
-			conn = sqlite3.connect(self.DB)
-			c = conn.cursor()
-			for x in range(0, self.DB_timeout):
-				try:
-					c.execute("""INSERT OR REPLACE INTO Used_URLs(url) VALUES (?)""", (url,))
-					conn.commit()
-				except sqlite3.OperationalError as e:
-					if "locked" in str(e):
-						sleep(1)
-					else:
-						self.logger.error(str(e))
-						conn.close()
-						raise
+
+	def insertUsed_Urls(self, urls):
+		conn = sqlite3.connect(self.DB)
+		c = conn.cursor()
+		for x in range(0, self.DB_timeout):
+			try:
+				c.execute("""INSERT OR REPLACE INTO Used_URLs(url) VALUES (?)""", (url,))
+				conn.commit()
+			except sqlite3.OperationalError as e:
+				if "locked" in str(e):
+					sleep(1)
 				else:
-					break
-			conn.close()
+					self.logger.error(str(e))
+					conn.close()
+					raise
+			else:
+				break
+		conn.close()

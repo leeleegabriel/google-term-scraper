@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
 
@@ -9,6 +9,8 @@ import sqlite3
 import time
 import logging
 import configparser
+import asyncio
+import datetime
 from time import sleep
 
 import lib.Helper as Helper
@@ -16,65 +18,75 @@ from lib.Scraper import Scraper
 from lib.Downloader import Downloader
 from lib.Filterer import Filterer
 
-version = 'v0.3.5'
-Config_file = 'config.txt'
-
 logger = logging.getLogger()
-handler = logging.StreamHandler()
-# loggin.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
-handler.setFormatter(logging.Formatter('%(asctime)s : %(message)s'))
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
+fmt = logging.Formatter('%(asctime)s - %(threadName)-11s -  %(levelname)s - %(message)s')
+
+
+fh1 = logging.FileHandler('./data/logs/%s.data_debug.log' % (datetime.datetime.now().strftime('%Y-%m-%d')))
+fh1.setLevel(logging.DEBUG)
+fh1.setFormatter(fmt)
+logger.addHandler(fh1)
+
+
+fh2 = logging.FileHandler('./data/logs/data.log')
+fh2.setLevel(logging.INFO)
+fh2.setFormatter(fmt)
+logger.addHandler(fh2)
+
 
 DB_timeout = 60
 Download_timeout = 60
 Filter_timeout = 600
+Number_of_results = 100
+Min_Number_of_terms = 10
+Max_Number_of_terms = 10
+version = 'v0.3.5'
+Download_dir = './downloads/'
+Config_dir = './config/'
+DB = 'ScrapeDB.db'
+Word_list = 'words.txt'
+Filetypes = 'filetypes.txt'
+ChromeDriver = 'chromedriver'
 
-
-# Maybe make directories static/generated from CBase_dir/DBase_dir
 
 def main():
 	logger.info('Starting GTS %s at %s' % (version, time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.localtime())))
 	Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir, DB_file, Words_file, Filetypes_file, ChromeDriver_file = setupDirs()
-	Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, Max_Number_of_terms, Words_file = getArgs(Words_file)
+	Scrape, Download, Filter, Filter_errors, Words_file = getArgs(Words_file)
 	setupDB(DB_file)
+
+	loop = asyncio.get_event_loop()
 
 	if Scrape:
 		scraper = Scraper(logger, DB_file, ChromeDriver_file, Max_Number_of_terms, Min_Number_of_terms, Number_of_results, Filetypes_file, Words_file)
-		try:
-			scraper.start()
-		except KeyboardInterrupt:
-			logger.debug('Detected KeyboardInterrupt')
+		future_S = loop.run_in_executor(None, scraper.run, loop)
 
 	if Download:
 		downloader =Downloader(logger, DB_file, Filter_errors, App_dir, Misc_dir)
-		try:
-			while True:
-				downloader.start()
-				logger.info(' Sleeping %.2fm' % (Download_timeout / 60.0))
-				sleep(Download_timeout)
-		except KeyboardInterrupt:
-			logger.debug('Detected KeyboardInterrupt')
+		future_d = loop.run_in_executor(None, downloader.run, loop)
 
 	if Filter:
 		filterer = Filterer(logger, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_file)
-		try:
-			while True:
-				filterer.start()
-				logger.info(' Sleeping %.2fm' % (Filter_timeout / 60.0))
-				sleep(Filter_timeout)
-		except KeyboardInterrupt:
-			logger.debug('Detected KeyboardInterrupt')
+		future_f = loop.run_in_executor(None, filterer.run, loop)
 
+	try:
+		loop.run_forever()
+	except KeyboardInterrupt:
+		if Scrape:
+			scraper.running = False
+		if Dowload:
+			downloader.running = False
+		if Filter:
+			filterer.running = False
+	while not scraper.fin and not downloader.fin and filterer.fin:
+		pass
+	loop.close()
+	logger.info('Fin.')	
 
 def setupDirs():
-	print(Config_file)
-	config = configparser.ConfigParser()
-	config.read(Config_file)
-	print(config.sections())
-
-	DBase_dir = config.get('Dirs', 'Download_dir').replace('\'', '')
-	CBase_dir = config.get('Dirs', 'Config_dir').replace('\'', '')
+	DBase_dir = Download_dir
+	CBase_dir = Config_dir
 
 	Sample_dir = DBase_dir + 'samples/'
 	Unfiltered_dir = DBase_dir + '/Unfiltered_dir/'
@@ -87,12 +99,12 @@ def setupDirs():
 
 	dirs = [DBase_dir, CBase_dir, Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir]
 	for dire in dirs:
-		Helper.makeFolder(dire) 
+		Helper.makeFolder(dire)
 
-	DB_file = CBase_dir + config.get('Files', 'DB').replace('\'', '')
-	Words_file = CBase_dir + config.get('Files', 'Word_list').replace('\'', '')
-	Filetypes_file = CSearch_dir + 'filetypes.txt'
-	ChromeDriver_file = CBase_dir + config.get('Files', 'ChromeDriver').replace('\'', '')
+	DB_file = CBase_dir + DB
+	Words_file = CBase_dir + Word_list
+	Filetypes_file = CSearch_dir + Filetypes
+	ChromeDriver_file = CBase_dir + ChromeDriver
 
 	files = [Words_file, Filetypes_file, ChromeDriver_file]
 	missing_files = [f for f in files if not Helper.checkFile(f)]
@@ -109,10 +121,7 @@ def getArgs(Words_file):
 	parser.add_argument('-d', '--download', default=False, dest='download', action='store_true', help='download from saved url list, no searching')
 	parser.add_argument('-de', '--filter_errors', default=False, action='store_true', help='Don\'t attempt to download previously attempted URLs with errors')
 	parser.add_argument('-f', '--filter', default=False, dest='filter', action='store_true', help='download from saved url list, no searching')
-	parser.add_argument('-r', '--results', default=10, help='number of top results collected in google search')
 	parser.add_argument('-v', '--verbose', default=False, action='store_true', help='Gives Verbose/Debug info in cmd')
-	parser.add_argument('-Ma', '--max_terms', default=10, help='max number of secondary search terms per google search')
-	parser.add_argument('-Mi', '--min_terms', default=3, help='min number of secondary search terms per google search')
 	parser.add_argument('-w', '--word_file', default=Words_file, help='word list name in config/search/ for generating queries')
 
 	args = parser.parse_args()
@@ -122,26 +131,14 @@ def getArgs(Words_file):
 	Filter = args.filter
 	Filter_errors = args.filter_errors
 
-	Number_of_results = int(args.results)
-	Min_Number_of_terms = int(args.min_terms)
-	Max_Number_of_terms = int(args.max_terms)
+	Words_file = args.word_file
 
-	Words_File = args.word_file
-
-	# if Filter_errors:
-	# 	Download = True
 	if not Scrape and not Download and not Filter:
 		Download, Scrape, Filter = True, True, True
-
-	if Min_Number_of_terms > Max_Number_of_terms:
-		logger.info('Error: Max < Min, setting Max terms to 10 and min terms to 3')
-		Max_Number_of_terms = 10
-		Min_Number_of_terms = 3
-
 	if args.verbose:
 		logger.setLevel(logging.DEBUG)
 
-	return Scrape, Download, Filter, Filter_errors, Number_of_results, Min_Number_of_terms, Max_Number_of_terms, Words_file
+	return Scrape, Download, Filter, Filter_errors, Words_file
 
 
 def setupDB(DB_file):
@@ -166,6 +163,7 @@ def setupDB(DB_file):
 			break
 	conn.close()
 
+
 if __name__ == '__main__':
 	if not os.geteuid() == 0:
 		logger.error('\nscript must be run as r00t!\n')
@@ -179,6 +177,5 @@ if __name__ == '__main__':
 	except ImportError as e:
 		logger.error('\nError importing, %s\n' % e.message)
 		sys.exit(1)
-	#nltk.download()
 	main()
 	logger.write('\nFinished..')

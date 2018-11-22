@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+# -*- coding: UTF-8 -*
 # https://stackoverflow.com/questions/2281850/timeout-function-if-it-takes-too-long-to-finish
 from functools import wraps
 import errno

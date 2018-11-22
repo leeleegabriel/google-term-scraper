@@ -1,9 +1,12 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/1
 
 import os
 import glob
+import sys
+
+sys.path.append('../')
 # from tqdm import tqdm
 
 

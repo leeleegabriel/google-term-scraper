@@ -1,10 +1,11 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
 import string
 import os
 import logging
 import pickle
+import sys
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem.porter import PorterStemmer
@@ -16,7 +17,7 @@ from sklearn.metrics import classification_report, confusion_matrix, accuracy_sc
 
 import lib.Helper as Helper
 
-os.chdir('../')
+sys.path.append('../')
 
 
 class Filterer():
@@ -28,10 +29,12 @@ class Filterer():
 		self.Error_dir = Error_dir
 		self.Unfiltered_dir = Unfiltered_dir
 		self.Words_file = Words_file
+		self.running = True
+		self.fin = False
 		self.aThreshhold = 0.70
 		self.sThreshhold = 144
 
-	def start(self):
+	def run(self, loop):
 		Files = Helper.getFiles(self.Unfiltered_dir + '/*')
 		self.logger.info('Sorting files')
 		if Files:

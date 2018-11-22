@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
 
@@ -7,6 +7,7 @@ import sqlite3
 # import html5lib
 import random
 import logging
+import sys
 import urllib.request as request
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -35,17 +36,16 @@ class Scraper():
 		self.Number_of_Results = Number_of_Results
 		self.Filetypes_file = Filetypes_file
 		self.Word_file = Word_file
+		self.running = True
+		self.fin = False
 		self.Proxy_count = 25
-		self.DB_timeout = 600
+		self.DB_timeout = 30
 		self.Browser_delay = 0.5
+		self.run_cap = 30
 
-	def start(self):
+	def run(self, loop):
 		Primary_words, Secondary_words = self.getWords(self.Word_file)
-		self.logger.info('Loaded Words from %s' % self.Word_file)
-		self.logger.info('\t%s Primary Words, %s Secondary words' % (len(Primary_words), len(Secondary_words)))
 		FileTypes = Helper.readFile(self.Filetypes_file)
-		self.logger.info('Loaded Filetypes from %s' % self.Filetypes_file)
-		self.logger.info('\tLooking for: %s' % (" ".join(str(x) for x in FileTypes)))
 		BaseQuery = str(" ".join(str(x) for x in Primary_words))
 		Queries = self.filterQueries(self.generateQueries(BaseQuery, Secondary_words))
 		self.Scrape(Queries, FileTypes)
@@ -61,6 +61,8 @@ class Scraper():
 					Primary_words.append(line.replace('*', ''))
 				else:
 					Secondary_words.append(line)
+		self.logger.debug('Loaded Words from %s' % self.Word_file)
+		self.logger.debug('\t%s Primary Words, %s Secondary words' % (len(Primary_words), len(Secondary_words)))
 		return Primary_words, Secondary_words
 
 	def generateQueries(self, base_query, secondary_words):
@@ -82,7 +84,7 @@ class Scraper():
 		filtered_queries = []
 		conn = sqlite3.connect(self.DB)
 		c = conn.cursor()
-		self.logger.info('Inserting Queries into DB')
+		self.logger.info('Filtering Queries')
 		for x in range(0, self.DB_timeout):
 			try:
 				c.execute("""create table Queries (query text PRIMARY KEY)""")
@@ -105,23 +107,31 @@ class Scraper():
 	def Scrape(self, queries, filetypes):
 		self.logger.info('Collecting URLs')
 		if queries:
-			chrome_options = Options()
-			chrome_options.add_argument('--headless')
-			chrome_options.add_argument('--window-size=1920x1080')
-			driver = webdriver.Chrome(executable_path=os.path.absolute(self.ChromeDriver_file), chrome_options=chrome_options)
-			driver.implicitly_wait(30)
-			for query in queries:
+			driver = self.initDriver()
+			url_array, query_array, run_count = self.initArray()
+			i = 0
+			while self.running and i < len(queries):
+				query = queries[i]
 				urls = [] + list(self.googleSearch(driver, query))
 				urls = [self.googleSearch(driver,'filtetype:' + f + ' ' + query) for f in filetypes]
 				if urls:
-					self.insertURLs(urls)
-					self.insertUsedQuery(query)
+					run_count += 1
+					query_array.append(query_array)
+					if run_count > self.run_cap:
+						self.insertURLs(url_array)
+						self.insertUsedQuery(query_array)
+						url_array, query_array, run_count = self.initArray()
 				else:
 					self.logger.debug('Found no urls with %s', query)
+				i += 1
 			driver.close()
+			self.insertURLs(url_array)
+			self.insertUsedQuery(query_array)
 			self.logger.info('Finished searching for urls')
 		else:
 			self.logger.info('No new queries found')
+		self.logger.debug('Fin.')
+		self.fin = True
 
 	def googleSearch(self, driver, query):
 		url = 'https://www.google.com/search?' + urlencode({'q': query, 'num': self.Number_of_Results}, quote_via=quote_plus)
@@ -154,12 +164,12 @@ class Scraper():
 				break
 		conn.close()
 
-	def insertUsedQuery(self, query):
+	def insertUsedQuery(self, queries):
 		conn = sqlite3.connect(self.DB)
 		c = conn.cursor()
 		for x in range(0, self.DB_timeout):
 			try:
-				c.execute("""INSERT OR IGNORE INTO Used_Queries (query) VALUES (?)""", query)
+				c.executemany("""INSERT OR IGNORE INTO Used_Queries (query) VALUES (?)""", queries)
 				conn.commit()
 			except sqlite3.OperationalError as e:
 				if "locked" in str(e):
@@ -171,3 +181,17 @@ class Scraper():
 			else:
 				break
 		conn.close()
+
+	def initArray(self):
+		url_array = []
+		query_array = []
+		run_count = 0 
+		return url_array, query_array, run_count
+
+	def initDriver(self):
+		chrome_options = Options()
+		chrome_options.add_argument('--headless')
+		chrome_options.add_argument('--window-size=1920x1080')
+		driver = webdriver.Chrome(executable_path=os.path.absolute(self.ChromeDriver_file), chrome_options=chrome_options)
+		driver.implicitly_wait(30)
+		return driver
