@@ -1,11 +1,12 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*
 # Lee Vanrell 7/1/18
-import string
 import os
-import logging
-import pickle
+# import logging
+# import pickle
 import sys
+import traceback
+from time import sleep
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem.porter import PorterStemmer
@@ -13,7 +14,7 @@ from nltk.stem.porter import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+# from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
 import lib.Helper as Helper
 
@@ -21,8 +22,9 @@ sys.path.append('../')
 
 
 class Filterer():
-	def __init__(self, logger, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_file):
-		self.self.logger = self.logger
+	def __init__(self, logger, Scraper, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_file):
+		self.logger = logger
+		self.Scraper = Scraper
 		self.Sample_dir = Sample_dir
 		self.Hit_dir = Hit_dir
 		self.Miss_dir = Miss_dir
@@ -33,27 +35,36 @@ class Filterer():
 		self.fin = False
 		self.aThreshhold = 0.70
 		self.sThreshhold = 144
+		self.Downloader_wait = 30
 
 	def run(self, loop):
-		Files = Helper.getFiles(self.Unfiltered_dir + '/*')
-		self.logger.info('Sorting files')
-		if Files:
-			if not os.listdir(self.Sample_dir):
-				self.logger.info("Sample Folder empty, doing simple filtering")
-				self.simpleAnalysis(Files, Helper.getText(self.Words_file))
-			else:
-				self.complexAnalysis(Files)
-			self.logger.info('Finished filtering files')
-		else:
-			self.logger.info('No files to filter')
+		try:
+			while self.Scraper.running and self.running:
+				Files = Helper.getFiles(self.Unfiltered_dir + '/*')
+				if Files:
+					if not os.listdir(self.Sample_dir):
+						self.simpleAnalysis(Files, Helper.getText(self.Words_file))
+					else:
+						self.complexAnalysis(Files)
+					self.logger.info('Finished filtering files')
+				else:
+					self.logger.info('No files to filter')
+				sleep(self.Downloader_wait)
+		except Exception as e:
+			self.logger.error(str(e))
+			traceback.print_exc()
+		self.logger.debug('Fin.')
+		self.fin = True
 
 	def complexAnalysis(self, files):
 		# if os.path.isfile('./config/text_classifier'):
 		# 	model = self.loadDataset()
 		# else:
+		self.logger.info('Sorting files: Complex')
 		model = self.getDataset('./config/dataset')
-
-		for f in files:
+		i = 0
+		while self.running and i < len(files):
+			f = files[i]
 			try:
 				text = self.cleanText(self.getText(f))
 				if model.predict(text) > self.aThreshhold:
@@ -65,9 +76,13 @@ class Filterer():
 				self.logger.error('Encountered Parse Error with %s', f)
 				dest = self.Error_dir + f.split('/')[:-1]
 			Helper.moveFile(f, dest)
+			i += 1
 
 	def simpleAnalysis(self, files, keywords):
-		for f in files:
+		self.logger.info('Sorting files: Simple')
+		i = 0
+		while self.running and i < len(files):
+			f = files[i]
 			try:
 				text = self.getText(f)
 				count = 0
@@ -82,6 +97,7 @@ class Filterer():
 				self.logger.error('Encountered Parse Error with %s', f)
 				dest = self.Error_dir + f.split('/')[:-1]
 			Helper.moveFile(f, dest)
+			i += 1
 
 	def getText(self, f):
 		try:

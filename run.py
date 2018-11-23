@@ -8,10 +8,11 @@ import argparse
 import sqlite3
 import time
 import logging
-import configparser
+# import configparser
 import asyncio
 import datetime
 from time import sleep
+from concurrent.futures import ProcessPoolExecutor
 
 import lib.Helper as Helper
 from lib.Scraper import Scraper
@@ -23,25 +24,25 @@ logger.setLevel(logging.DEBUG)
 fmt = logging.Formatter('%(asctime)s - %(threadName)-11s -  %(levelname)s - %(message)s')
 
 
-fh1 = logging.FileHandler('./data/logs/%s.data_debug.log' % (datetime.datetime.now().strftime('%Y-%m-%d')))
+fh1 = logging.FileHandler('gts_debug.log')
 fh1.setLevel(logging.DEBUG)
 fh1.setFormatter(fmt)
 logger.addHandler(fh1)
 
 
-fh2 = logging.FileHandler('./data/logs/data.log')
+fh2 = logging.FileHandler('gts.log')
 fh2.setLevel(logging.INFO)
 fh2.setFormatter(fmt)
 logger.addHandler(fh2)
 
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+ch.setFormatter(fmt)
+logger.addHandler(ch)
+
 
 DB_timeout = 60
-Download_timeout = 60
-Filter_timeout = 600
-Number_of_results = 100
-Min_Number_of_terms = 10
-Max_Number_of_terms = 10
-version = 'v0.3.5'
+version = 'v0.5'
 Download_dir = './downloads/'
 Config_dir = './config/'
 DB = 'ScrapeDB.db'
@@ -53,36 +54,33 @@ ChromeDriver = 'chromedriver'
 def main():
 	logger.info('Starting GTS %s at %s' % (version, time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.localtime())))
 	Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir, DB_file, Words_file, Filetypes_file, ChromeDriver_file = setupDirs()
-	Scrape, Download, Filter, Filter_errors, Words_file = getArgs(Words_file)
+	Filter_errors, Words_file = getArgs(Words_file)
 	setupDB(DB_file)
 
 	loop = asyncio.get_event_loop()
+	#executor = ProcessPoolExecutor()
 
-	if Scrape:
-		scraper = Scraper(logger, DB_file, ChromeDriver_file, Max_Number_of_terms, Min_Number_of_terms, Number_of_results, Filetypes_file, Words_file)
-		future_S = loop.run_in_executor(None, scraper.run, loop)
+	scraper = Scraper(logger, DB_file, ChromeDriver_file, Filetypes_file, Words_file)
+	future_S = loop.run_in_executor(None, scraper.run, loop)
 
-	if Download:
-		downloader =Downloader(logger, DB_file, Filter_errors, App_dir, Misc_dir)
-		future_d = loop.run_in_executor(None, downloader.run, loop)
+	downloader =Downloader(logger, scraper, DB_file, Filter_errors, App_dir, Misc_dir)
+	future_d = loop.run_in_executor(None, downloader.run, loop)
 
-	if Filter:
-		filterer = Filterer(logger, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_file)
-		future_f = loop.run_in_executor(None, filterer.run, loop)
+	filterer = Filterer(logger, scraper, Sample_dir, Hit_dir, Miss_dir, Error_dir, Unfiltered_dir, Words_file)
+	future_f = loop.run_in_executor(None, filterer.run, loop)
 
 	try:
 		loop.run_forever()
 	except KeyboardInterrupt:
-		if Scrape:
-			scraper.running = False
-		if Dowload:
-			downloader.running = False
-		if Filter:
-			filterer.running = False
-	while not scraper.fin and not downloader.fin and filterer.fin:
+		scraper.running = False
+		downloader.running = False
+		filterer.running = False
+		print()
+	while not scraper.fin or not downloader.fin or not filterer.fin:
 		pass
 	loop.close()
 	logger.info('Fin.')	
+
 
 def setupDirs():
 	DBase_dir = Download_dir
@@ -111,34 +109,19 @@ def setupDirs():
 	if missing_files:
 		logger.error('missing files: %s' % missing_files)
 		sys.exit(0)
-
 	return Sample_dir, Unfiltered_dir, App_dir, Misc_dir, Hit_dir, Miss_dir, Error_dir, CSearch_dir, DB_file, Words_file, Filetypes_file, ChromeDriver_file
 
 
 def getArgs(Words_file):
 	parser = argparse.ArgumentParser(description='google-term-scraper', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-	parser.add_argument('-s', '--scrape', default=False, dest='scrape', action='store_true', help='search and collect urls, no downloading of file')
-	parser.add_argument('-d', '--download', default=False, dest='download', action='store_true', help='download from saved url list, no searching')
 	parser.add_argument('-de', '--filter_errors', default=False, action='store_true', help='Don\'t attempt to download previously attempted URLs with errors')
-	parser.add_argument('-f', '--filter', default=False, dest='filter', action='store_true', help='download from saved url list, no searching')
-	parser.add_argument('-v', '--verbose', default=False, action='store_true', help='Gives Verbose/Debug info in cmd')
 	parser.add_argument('-w', '--word_file', default=Words_file, help='word list name in config/search/ for generating queries')
-
 	args = parser.parse_args()
 
-	Scrape = args.scrape
-	Download = args.download
-	Filter = args.filter
 	Filter_errors = args.filter_errors
-
 	Words_file = args.word_file
 
-	if not Scrape and not Download and not Filter:
-		Download, Scrape, Filter = True, True, True
-	if args.verbose:
-		logger.setLevel(logging.DEBUG)
-
-	return Scrape, Download, Filter, Filter_errors, Words_file
+	return Filter_errors, Words_file
 
 
 def setupDB(DB_file):
@@ -168,7 +151,6 @@ if __name__ == '__main__':
 	if not os.geteuid() == 0:
 		logger.error('\nscript must be run as r00t!\n')
 		sys.exit(1)
-
 	try:
 		import textract
 		import tika
@@ -178,4 +160,4 @@ if __name__ == '__main__':
 		logger.error('\nError importing, %s\n' % e.message)
 		sys.exit(1)
 	main()
-	logger.write('\nFinished..')
+

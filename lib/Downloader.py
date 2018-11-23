@@ -8,6 +8,7 @@ import errno
 import sqlite3
 import sys
 import urllib
+import traceback
 from time import sleep
 from urllib.request import urlopen
 # from tqdm import tqdm
@@ -19,8 +20,9 @@ sys.path.append('../')
 
 
 class Downloader():
-	def __init__(self, logger, DB_file, Filter_errors, App_dir, Misc_dir):
+	def __init__(self, logger, Scraper, DB_file, Filter_errors, App_dir, Misc_dir):
 		self.logger = logger
+		self.Scraper = Scraper
 		self.DB = DB_file
 		self.Filter_errors = Filter_errors
 		self.App_dir = App_dir
@@ -29,19 +31,27 @@ class Downloader():
 		self.fin = False
 		self.DB_timeout = 30
 		self.run_cap = 30
+		self.Scraper_wait = 30
 
 	def run(self, loop):
-		Downloads = self.filterDownloads()
-		if Downloads:
-			self.getFiles(Downloads)
-		else:
-			self.logger.info('No new URLs found')
+		try:
+			while self.Scraper.running and self.running:
+				Downloads = self.filterDownloads()
+				if Downloads:
+					self.getFiles(Downloads)
+				else:
+					self.logger.info('No new URLs found')
+					sleep(self.Scraper_wait)
+		except Exception as e:
+			self.logger.error(str(e))
+			traceback.print_exc()
+		self.logger.debug('Fin.')
+		self.fin = True
 
 	def filterDownloads(self):
-		self.logger.info('Getting URLs from self.DB')
+		self.logger.info('Getting URLs from DB')
 		conn = sqlite3.connect(self.DB)
 		c = conn.cursor()
-
 		Downloads = []
 		for x in range(0, self.DB_timeout):
 			try:
@@ -65,8 +75,11 @@ class Downloader():
 	def getFiles(self, Downloads):
 		self.logger.info('Attempting to Download Files from %s URLs' % len(Downloads))
 		urls = []
+		errors = []
 		run_count = 0
-		for url in Downloads:
+		i = 0
+		while self.running and i < len(Downloads):
+			url = Downloads[i]
 			try:
 				if not os.path.isfile(self.App_dir + b64encode(url)) and not os.path.isfile(self.Misc_dir  + b64encode(url)):
 					self.logger.debug('Downloading %s', url)
@@ -74,30 +87,18 @@ class Downloader():
 				else:
 					self.logger.debug('Already downloaded %s', url)
 				urls.append(url)
-				run_count = 0
+				run_count += 1
 				if run_count > self.run_cap:
 					self.insertUsed_Urls(urls)
 					urls = []
 					run_count = 0
 			except Exception as error:
 				self.logger.debug('Logging download error: %s', url)
-				conn = sqlite3.connect(self.DB)
-				c = conn.cursor()
-				for x in range(0, self.DB_timeout):
-					try:
-						c.execute("""INSERT OR REPLACE INTO Download_Errors (url, Error) VALUES (?, ?)""", (url, str(error)))
-						conn.commit()
-					except sqlite3.OperationalError as e:
-						if "locked" in str(e):
-							sleep(1)
-						else:
-							self.logger.error(str(e))
-							conn.close()
-							raise
-					else:
-						break
-				conn.close()
+				errors.append([url, str(error)])
+
+			i += 1
 		self.insertUsed_Urls(urls)
+		self.insertErrors(errors)
 		self.logger.info('Finished downloading files')
 
 	@timeout(10, os.strerror(errno.ETIMEDOUT))
@@ -120,7 +121,25 @@ class Downloader():
 		c = conn.cursor()
 		for x in range(0, self.DB_timeout):
 			try:
-				c.execute("""INSERT OR REPLACE INTO Used_URLs(url) VALUES (?)""", (url,))
+				c.executemany("""INSERT OR REPLACE INTO Used_URLs(url) VALUES (?)""", urls)
+				conn.commit()
+			except sqlite3.OperationalError as e:
+				if "locked" in str(e):
+					sleep(1)
+				else:
+					self.logger.error(str(e))
+					conn.close()
+					raise
+			else:
+				break
+		conn.close()
+
+	def insertErrors(self, errors):
+		conn = sqlite3.connect(self.DB)
+		c = conn.cursor()
+		for x in range(0, self.DB_timeout):
+			try:
+				c.executemany("""INSERT OR REPLACE INTO Download_Errors (url, Error) VALUES (?, ?)""", errors)
 				conn.commit()
 			except sqlite3.OperationalError as e:
 				if "locked" in str(e):
