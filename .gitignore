@@ -4,6 +4,7 @@ lib/__pycache__/*
 **.txt
 **.db
 **.pyc
+**.log
 *.sublime-project
 *.cfg
 test.py

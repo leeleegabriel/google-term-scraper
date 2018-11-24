@@ -194,9 +194,10 @@ class Scraper():
 
 	def initDriver(self):
 		chrome_options = Options()
-		#chrome_options.add_argument('--headless')
+		chrome_options.add_argument('--headless')
 		chrome_options.add_argument('--no-sandbox')
 		chrome_options.add_argument('--disable-dev-shm-usage')
+		chrome_options.add_argument("--user-data-dir=/home/lee/.config/google-chrome")
 		#chrome_options.add_argument('--window-size=1920x1080')
 		driver = webdriver.Chrome(executable_path=self.ChromeDriver_file, chrome_options=chrome_options)
 		driver.implicitly_wait(30)
